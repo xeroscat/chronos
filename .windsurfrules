@@ -1,0 +1,21 @@
+# Chronos AI - Windsurf Rules
+
+## Tech Stack & Architecture
+- **Framework:** React Native + Expo (v51+) with Expo Router.
+- **Styling:** NativeWind v4 (Tailwind for React Native) - Always import `../global.css` or the correct path to global.css in root layouts.
+- **State Management:** Zustand (for ephemeral/UI state) and React Query (for server state).
+- **Backend & Auth:** Supabase (PostgreSQL + Auth + Edge Functions).
+- **Graphics Engine:** React Native Skia (`@shopify/react-native-skia`) and React Native Reanimated.
+
+## Core Rules & Constraints
+1. **Single Source of Truth for Types:** All core data models, DTOs, and ViewModels must be imported from `src/types/index.ts`. Never redefine types or structures locally.
+2. **The Slot System (M1):** 
+   - Time is represented in 288 slots per day (0 to 287). Each slot = 5 minutes.
+   - Start/End of the day (00:00 / Slot 0) is at the **bottom** of the circle (6 o'clock position).
+   - Rotation is clockwise.
+   - Mathematics: `startAngle = 90 + (slotInicio * 1.25)` and `sweepAngle = duracionSlots * 1.25`.
+3. **No Drag and Drop:** All blocks are added via form UI buttons. Timeline interactions are purely tap/click-based.
+4. **State Separation Rule:**
+   - Server data (Tasks, Projects, TimeBlocks) -> React Query.
+   - Temporary UI state (modals open, active task selected) -> Zustand.
+   - Local settings (theme, tokens) -> MMKV.
