@@ -1,6 +1,6 @@
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, Pressable, Dimensions } from 'react-native';
+import { View, Text, Pressable, Dimensions, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, TouchableOpacity } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -8,8 +8,11 @@ import { Canvas, Circle, Path, Skia, vec, Line } from '@shopify/react-native-ski
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  withSpring,
   withTiming,
-  Easing,
+  FadeInRight,
+  FadeOutRight,
+  LinearTransition,
 } from 'react-native-reanimated';
 
 const mockBlocks = [
@@ -52,21 +55,41 @@ const createArcPath = (x: number, y: number, r: number, startAngle: number, swee
 export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'tareas' | 'recordatorios'>('tareas');
+  const [taskTitle, setTaskTitle] = useState('Nueva Tarea');
+  const [selectedPilar, setSelectedPilar] = useState<'cuerpo' | 'mente' | 'productividad' | 'personal'>('productividad');
+  const [isPilarSelectorOpen, setIsPilarSelectorOpen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
 
   useEffect(() => {
+    const keyboardShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const keyboardHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardShowListener.remove();
+      keyboardHideListener.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (isFormOpen) {
       setIsVisible(true);
-      translateY.value = withTiming(0, { duration: 350, easing: Easing.out(Easing.cubic) });
-      backdropOpacity.value = withTiming(0.3, { duration: 350 });
+      const targetY = keyboardHeight > 0 ? -keyboardHeight / 2 : 0;
+      translateY.value = withSpring(targetY, { mass: 1, damping: 20, stiffness: 100 });
+      backdropOpacity.value = withTiming(0.3, { duration: 330 });
     } else {
-      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300, easing: Easing.out(Easing.cubic) });
-      backdropOpacity.value = withTiming(0, { duration: 350 });
-      setTimeout(() => setIsVisible(false), 350);
+      translateY.value = withSpring(SCREEN_HEIGHT, { mass: 1, damping: 20, stiffness: 100 });
+      backdropOpacity.value = withTiming(0, { duration: 250 });
+      setTimeout(() => setIsVisible(false), 300);
     }
-  }, [isFormOpen, SCREEN_HEIGHT]);
+  }, [isFormOpen, SCREEN_HEIGHT, keyboardHeight]);
 
 
   const animatedCardStyle = useAnimatedStyle(() => {
@@ -189,13 +212,105 @@ export default function App() {
             <Animated.View style={animatedBackdropStyle} className="absolute inset-0 bg-black/30" />
           </Pressable>
           
-          {/* Form Card */}
-          <Animated.View
-            style={[animatedCardStyle]}
-            className="w-[322px] min-h-[350px] bg-slate-800 rounded-3xl border-2 border-indigo-500 p-5 shadow-2xl absolute z-50 self-center bottom-6"
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', zIndex: 50 }}
+            pointerEvents="box-none"
           >
-            <Text className="text-white text-center">Skeleton Formulario</Text>
-          </Animated.View>
+            <Animated.View
+              style={[animatedCardStyle]}
+              className="w-[322px] h-[350px] bg-[#E0E0E0] rounded-[24px] shadow-2xl border border-black/5 p-0 overflow-hidden mb-6"
+            >
+            {/* Tab Bar */}
+            <Animated.View layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)} className="flex-row w-full h-[48px] items-end px-3">
+              <TouchableOpacity
+                onPress={() => setActiveTab('tareas')}
+                className={activeTab === 'tareas' ? 'flex-1 h-[40px] bg-white rounded-t-[16px] items-center justify-center' : 'flex-1 h-[40px] bg-transparent items-center justify-center'}
+              >
+                <Text className={activeTab === 'tareas' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-slate-500'}>Tarea</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setActiveTab('recordatorios')}
+                className={activeTab === 'recordatorios' ? 'flex-1 h-[40px] bg-white rounded-t-[16px] items-center justify-center' : 'flex-1 h-[40px] bg-transparent items-center justify-center'}
+              >
+                <Text className={activeTab === 'recordatorios' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-slate-500'}>Recordatorio</Text>
+              </TouchableOpacity>
+            </Animated.View>
+            
+            {/* Internal White Card (Body) */}
+            <Animated.View layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)} className="w-full bg-white p-4 flex-1 rounded-b-[24px]">
+              {/* Header */}
+              <View className="flex-row items-center justify-between h-[36px] w-full">
+                {/* Left: Editable Title */}
+                <TextInput
+                  value={taskTitle}
+                  onChangeText={setTaskTitle}
+                  className="text-lg font-bold text-slate-900 bg-transparent p-0 m-0 flex-1"
+                />
+                
+                {/* Right: Pilar Selector */}
+                <View className="flex-row items-center justify-end">
+                  {!isPilarSelectorOpen ? (
+                    <TouchableOpacity
+                      onPress={() => setIsPilarSelectorOpen(true)}
+                      className="flex-row items-center"
+                      style={{ gap: 8 }}
+                    >
+                      <Text className="text-base font-bold text-slate-500">
+                        {selectedPilar.charAt(0).toUpperCase() + selectedPilar.slice(1)}
+                      </Text>
+                      <View className="w-[28px] h-[28px] rounded-full" style={{ backgroundColor: PILLAR_COLORS[selectedPilar] }} />
+                    </TouchableOpacity>
+                  ) : (
+                    <Animated.View
+                      entering={FadeInRight.springify().mass(0.5).damping(12).stiffness(150)}
+                      exiting={FadeOutRight.springify().mass(0.5).damping(12).stiffness(150)}
+                      layout={LinearTransition.springify().mass(0.5).damping(12).stiffness(150)}
+                      className="flex-row items-center bg-slate-100 rounded-full px-3 py-1.5 border border-slate-200"
+                      style={{ gap: 8 }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPilar('cuerpo');
+                          setIsPilarSelectorOpen(false);
+                        }}
+                        className="w-[26px] h-[26px] rounded-full"
+                        style={{ backgroundColor: PILLAR_COLORS.cuerpo }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPilar('mente');
+                          setIsPilarSelectorOpen(false);
+                        }}
+                        className="w-[26px] h-[26px] rounded-full"
+                        style={{ backgroundColor: PILLAR_COLORS.mente }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPilar('productividad');
+                          setIsPilarSelectorOpen(false);
+                        }}
+                        className="w-[26px] h-[26px] rounded-full"
+                        style={{ backgroundColor: PILLAR_COLORS.productividad }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPilar('personal');
+                          setIsPilarSelectorOpen(false);
+                        }}
+                        className="w-[26px] h-[26px] rounded-full"
+                        style={{ backgroundColor: PILLAR_COLORS.personal }}
+                      />
+                    </Animated.View>
+                  )}
+                </View>
+              </View>
+              
+              {/* Divider Line */}
+              <View className="h-[1px] w-[284px] bg-slate-200 self-center mt-3" />
+            </Animated.View>
+            </Animated.View>
+          </KeyboardAvoidingView>
         </>
       )}
     </SafeAreaView>
