@@ -1,6 +1,6 @@
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, Pressable, Dimensions, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, Pressable, Dimensions, TextInput, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, TouchableOpacity } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -25,7 +25,7 @@ const PILLAR_COLORS = {
   cuerpo: '#FF5733',
   mente: '#33A1FF',
   productividad: '#FFC300',
-  personal: '#8E44AD',
+  personal: '#34C759',
 };
 
 const PILLAR_RADII: Record<string, number> = {
@@ -59,17 +59,21 @@ export default function App() {
   const [taskTitle, setTaskTitle] = useState('Nueva Tarea');
   const [selectedPilar, setSelectedPilar] = useState<'cuerpo' | 'mente' | 'productividad' | 'personal'>('productividad');
   const [isPilarSelectorOpen, setIsPilarSelectorOpen] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
+  const keyboardOffsetValue = useSharedValue(0);
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
+      const offset = e.endCoordinates.height - 80;
+      setKeyboardOffset(offset);
+      keyboardOffsetValue.value = withSpring(-offset, { mass: 1, damping: 20, stiffness: 100 });
     });
     const keyboardHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
+      setKeyboardOffset(0);
+      keyboardOffsetValue.value = withSpring(0, { mass: 1, damping: 20, stiffness: 100 });
     });
 
     return () => {
@@ -81,20 +85,19 @@ export default function App() {
   useEffect(() => {
     if (isFormOpen) {
       setIsVisible(true);
-      const targetY = keyboardHeight > 0 ? -keyboardHeight / 2 : 0;
-      translateY.value = withSpring(targetY, { mass: 1, damping: 20, stiffness: 100 });
+      translateY.value = withSpring(0, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0.3, { duration: 330 });
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0, { duration: 250 });
       setTimeout(() => setIsVisible(false), 300);
     }
-  }, [isFormOpen, SCREEN_HEIGHT, keyboardHeight]);
+  }, [isFormOpen, SCREEN_HEIGHT]);
 
 
   const animatedCardStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ translateY: translateY.value }],
+      transform: [{ translateY: translateY.value + keyboardOffsetValue.value }],
     };
   });
 
@@ -190,7 +193,7 @@ export default function App() {
       {/* Floating Action Button (FAB) */}
       {!isFormOpen && (
         <TouchableOpacity
-          className="absolute z-30 top-[365px] right-[35px] w-[38px] h-[38px] rounded-full items-center justify-center bg-[#1E293B] border border-white/20"
+          className="absolute z-30 top-[365px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-slate-300 border border-white/20"
           onPress={() => setIsFormOpen(true)}
         >
           <Image
@@ -212,14 +215,13 @@ export default function App() {
             <Animated.View style={animatedBackdropStyle} className="absolute inset-0 bg-black/30" />
           </Pressable>
           
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          <View
             style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', zIndex: 50 }}
             pointerEvents="box-none"
           >
             <Animated.View
               style={[animatedCardStyle]}
-              className="w-[322px] h-[350px] bg-[#E0E0E0] rounded-[24px] shadow-2xl border border-black/5 p-0 overflow-hidden mb-6"
+              className="w-[322px] min-h-[350px] bg-[#E0E0E0] rounded-[24px] shadow-2xl border border-black/5 p-0 overflow-hidden mb-6"
             >
             {/* Tab Bar */}
             <Animated.View layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)} className="flex-row w-full h-[48px] items-end px-3">
@@ -279,14 +281,6 @@ export default function App() {
                       />
                       <TouchableOpacity
                         onPress={() => {
-                          setSelectedPilar('mente');
-                          setIsPilarSelectorOpen(false);
-                        }}
-                        className="w-[26px] h-[26px] rounded-full"
-                        style={{ backgroundColor: PILLAR_COLORS.mente }}
-                      />
-                      <TouchableOpacity
-                        onPress={() => {
                           setSelectedPilar('productividad');
                           setIsPilarSelectorOpen(false);
                         }}
@@ -301,6 +295,14 @@ export default function App() {
                         className="w-[26px] h-[26px] rounded-full"
                         style={{ backgroundColor: PILLAR_COLORS.personal }}
                       />
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPilar('mente');
+                          setIsPilarSelectorOpen(false);
+                        }}
+                        className="w-[26px] h-[26px] rounded-full"
+                        style={{ backgroundColor: PILLAR_COLORS.mente }}
+                      />
                     </Animated.View>
                   )}
                 </View>
@@ -310,7 +312,7 @@ export default function App() {
               <View className="h-[1px] w-[284px] bg-slate-200 self-center mt-3" />
             </Animated.View>
             </Animated.View>
-          </KeyboardAvoidingView>
+          </View>
         </>
       )}
     </SafeAreaView>
