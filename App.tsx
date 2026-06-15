@@ -13,6 +13,8 @@ import Animated, {
   FadeInRight,
   FadeOutRight,
   LinearTransition,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated';
 
 const mockBlocks = [
@@ -60,6 +62,19 @@ export default function App() {
   const [selectedPilar, setSelectedPilar] = useState<'cuerpo' | 'mente' | 'productividad' | 'personal'>('productividad');
   const [isPilarSelectorOpen, setIsPilarSelectorOpen] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  
+  // Tarea states
+  const [startTime, setStartTime] = useState('08:30');
+  const [duration, setDuration] = useState('1h 30m');
+  const [reminderBefore, setReminderBefore] = useState('5m');
+  const [description, setDescription] = useState('');
+  
+  // Recordatorio states
+  const [reminderTime, setReminderTime] = useState('15:15');
+  const [reminderDesc, setReminderDesc] = useState('');
+  
+  // Description editor state
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -67,7 +82,7 @@ export default function App() {
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      const offset = e.endCoordinates.height - 80;
+      const offset = e.endCoordinates.height - 100;
       setKeyboardOffset(offset);
       keyboardOffsetValue.value = withSpring(-offset, { mass: 1, damping: 20, stiffness: 100 });
     });
@@ -198,7 +213,7 @@ export default function App() {
         >
           <Image
             source={require('./assets/plus.png')}
-            style={{ width: 14, height: 14 }}
+            style={{ width: 18, height: 18 }}
             resizeMode="contain"
           />
         </TouchableOpacity>
@@ -310,6 +325,146 @@ export default function App() {
               
               {/* Divider Line */}
               <View className="h-[1px] w-[284px] bg-slate-200 self-center mt-3" />
+              
+              {/* Two-Column Form Grid */}
+              <View className="flex-row justify-between w-[280px] self-center mt-4">
+                {/* Left Column */}
+                <View className="w-[125px]">
+                  {activeTab === 'tareas' ? (
+                    <>
+                      {/* Hora de inicio */}
+                      <Text className="text-[13px] font-bold text-center text-slate-400 mb-1">Hora de inicio</Text>
+                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
+                        <Text className="text-[12px] font-medium text-slate-800">5:30</Text>
+                        <Text className="text-[12px] ml-1">🌅</Text>
+                      </View>
+                      
+                      {/* Recordar */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Recordar</Text>
+                      <View className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2">
+                        <Text className="text-[12px] font-medium text-slate-800">2m antes</Text>
+                      </View>
+                      
+                      {/* Guardar Button */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
+                        <Text className="text-[12px] font-bold text-slate-800">Guardar</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      {/* Hora */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Hora</Text>
+                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
+                        <Text className="text-[12px] font-medium text-slate-800">15:15</Text>
+                      </View>
+                      
+                      {/* Recordar */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Recordar</Text>
+                      <View className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2">
+                        <Text className="text-[12px] font-medium text-slate-800">Al instante</Text>
+                      </View>
+                      
+                      {/* Guardar Button */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
+                        <Text className="text-[12px] font-bold text-slate-800">Guardar</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+                
+                {/* Right Column */}
+                <View className="w-[125px]">
+                  {activeTab === 'tareas' ? (
+                    <>
+                      {/* Duración */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Duración</Text>
+                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
+                        <Text className="text-[12px] font-medium text-slate-800">1 hr 30 m</Text>
+                      </View>
+                      
+                      {/* Descripción */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Descripción</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingDesc(true)}
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">Add</Text>
+                        <Image
+                          source={require('./assets/plus.png')}
+                          style={{ width: 12, height: 12, marginLeft: 8 }}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      
+                      {/* Cancelar Button */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <TouchableOpacity
+                        onPress={() => setIsFormOpen(false)}
+                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
+                      >
+                        <Text className="text-[12px] font-bold text-white">Cancel</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      {/* Empty space for balance */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <View className="w-full h-[36px] mb-2" />
+                      
+                      {/* Descripción */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Descripción</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingDesc(true)}
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">Add</Text>
+                        <Image
+                          source={require('./assets/plus.png')}
+                          style={{ width: 12, height: 12, marginLeft: 8 }}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      
+                      {/* Cancelar Button */}
+                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <TouchableOpacity
+                        onPress={() => setIsFormOpen(false)}
+                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
+                      >
+                        <Text className="text-[12px] font-bold text-white">Cancel</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </View>
+              
+              {/* Description Editor (iOS-style full screen animation) */}
+              {isEditingDesc && (
+                <Animated.View
+                  entering={FadeIn.duration(250)}
+                  exiting={FadeOut.duration(150)}
+                  className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col"
+                >
+                  <Text className="text-sm font-bold text-slate-400 mb-2">Descripción de la Tarea</Text>
+                  <TextInput
+                    className="flex-1 text-slate-900 text-sm py-2"
+                    multiline
+                    placeholder="Escribe aquí los detalles ..."
+                    value={description}
+                    onChangeText={setDescription}
+                    autoFocus
+                    textAlignVertical="top"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setIsEditingDesc(false)}
+                    className="w-full h-[36px] bg-[#3F3F3F] rounded-full justify-center items-center"
+                  >
+                    <Text className="text-[12px] font-bold text-white">Listo</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
             </Animated.View>
             </Animated.View>
           </View>
