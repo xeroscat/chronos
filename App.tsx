@@ -1,9 +1,16 @@
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'react-native';
+import { Image, TouchableOpacity } from 'react-native';
+import { useState, useEffect } from 'react';
 import { Canvas, Circle, Path, Skia, vec, Line } from '@shopify/react-native-skia';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 const mockBlocks = [
   { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo' }, // 07:00 a 08:30 (Cuerpo - Naranja)
@@ -43,6 +50,37 @@ const createArcPath = (x: number, y: number, r: number, startAngle: number, swee
 };
 
 export default function App() {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const translateY = useSharedValue(SCREEN_HEIGHT);
+  const backdropOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (isFormOpen) {
+      setIsVisible(true);
+      translateY.value = withTiming(0, { duration: 350, easing: Easing.out(Easing.cubic) });
+      backdropOpacity.value = withTiming(0.3, { duration: 350 });
+    } else {
+      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300, easing: Easing.out(Easing.cubic) });
+      backdropOpacity.value = withTiming(0, { duration: 350 });
+      setTimeout(() => setIsVisible(false), 350);
+    }
+  }, [isFormOpen, SCREEN_HEIGHT]);
+
+
+  const animatedCardStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: translateY.value }],
+    };
+  });
+
+  const animatedBackdropStyle = useAnimatedStyle(() => {
+    return {
+      opacity: backdropOpacity.value,
+    };
+  });
+  
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar style="light" />
@@ -125,6 +163,41 @@ export default function App() {
       
       {/* TAB Info - Flex 1 */}
       <View className="flex-1 bg-slate-50" />
+      
+      {/* Floating Action Button (FAB) */}
+      {!isFormOpen && (
+        <TouchableOpacity
+          className="absolute z-30 top-[365px] right-[35px] w-[38px] h-[38px] rounded-full items-center justify-center bg-[#1E293B] border border-white/20"
+          onPress={() => setIsFormOpen(true)}
+        >
+          <Image
+            source={require('./assets/plus.png')}
+            style={{ width: 14, height: 14 }}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      )}
+      
+      {/* Form Layer */}
+      {isVisible && (
+        <>
+          {/* Backdrop */}
+          <Pressable
+            onPress={() => setIsFormOpen(false)}
+            className="absolute inset-0 z-40"
+          >
+            <Animated.View style={animatedBackdropStyle} className="absolute inset-0 bg-black/30" />
+          </Pressable>
+          
+          {/* Form Card */}
+          <Animated.View
+            style={[animatedCardStyle]}
+            className="w-[322px] min-h-[350px] bg-slate-800 rounded-3xl border-2 border-indigo-500 p-5 shadow-2xl absolute z-50 self-center bottom-6"
+          >
+            <Text className="text-white text-center">Skeleton Formulario</Text>
+          </Animated.View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
