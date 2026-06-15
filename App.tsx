@@ -86,7 +86,7 @@ export default function App() {
     if (isFormOpen) {
       setIsVisible(true);
       translateY.value = withSpring(0, { mass: 1, damping: 20, stiffness: 100 });
-      backdropOpacity.value = withTiming(0.3, { duration: 330 });
+      backdropOpacity.value = withTiming(0, { duration: 330 });
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0, { duration: 250 });
