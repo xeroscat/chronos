@@ -1,6 +1,7 @@
+import React from 'react';
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, Pressable, Dimensions, TextInput, Keyboard } from 'react-native';
+import { View, Text, Pressable, Dimensions, TextInput, Keyboard, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, TouchableOpacity } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -54,6 +55,104 @@ const createArcPath = (x: number, y: number, r: number, startAngle: number, swee
     .build();
 };
 
+interface ScrollWheelProps {
+  items: string[];
+  selectedValue: string;
+  onValueChange: (value: string) => void;
+  itemHeight?: number;
+}
+
+const ScrollWheel: React.FC<ScrollWheelProps> = ({
+  items,
+  selectedValue,
+  onValueChange,
+  itemHeight = 40,
+}) => {
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const [localIndex, setLocalIndex] = React.useState(items.indexOf(selectedValue));
+
+  // 1. Arquitectura de Elementos Fantasma: Evita el paddingVertical buggeado en Android
+  const paddedItems = ['', '', ...items, '', ''];
+
+  React.useEffect(() => {
+    const initialIndex = items.indexOf(selectedValue);
+    if (initialIndex !== -1) {
+      setLocalIndex(initialIndex);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: initialIndex * itemHeight, animated: false });
+      }, 100);
+    }
+  }, []);
+
+  const handleScroll = (event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const safeY = Math.max(0, y); // Evita cálculos negativos en el rebote
+    const index = Math.round(safeY / itemHeight);
+    
+    if (index >= 0 && index < items.length) {
+      if (index !== localIndex) {
+        setLocalIndex(index);
+      }
+    }
+  };
+
+  // Solo actualiza el padre cuando la rueda se detiene por completo
+  const handleMomentumEnd = (event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const safeY = Math.max(0, y);
+    const index = Math.round(safeY / itemHeight);
+    if (index >= 0 && index < items.length) {
+      onValueChange(items[index]);
+    }
+  };
+
+  // Si el usuario arrastra lento y suelta sin inercia, momentum no se dispara.
+  // Lo capturamos aquí, pero SOLO si la velocidad es casi cero.
+  const handleDragEnd = (event: any) => {
+    const velocity = event.nativeEvent.velocity?.y || 0;
+    if (Math.abs(velocity) < 0.1) {
+      handleMomentumEnd(event);
+    }
+  };
+
+  return (
+    <View style={{ height: itemHeight * 5, width: 90, overflow: 'hidden' }}>
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={itemHeight}
+        decelerationRate="fast" // Fast es ideal para que el imán actúe rápido al final del giro
+        onScroll={handleScroll}
+        onMomentumScrollEnd={handleMomentumEnd}
+        onScrollEndDrag={handleDragEnd}
+        scrollEventThrottle={16}
+        // Eliminamos paddingVertical, snapToAlignment y disableIntervalMomentum
+      >
+        {paddedItems.map((item, index) => {
+          // El índice real de los datos está desfasado por los 2 elementos fantasma
+          const realIndex = index - 2;
+          const diff = Math.abs(realIndex - localIndex);
+          
+          let textClass = 'text-slate-200 text-sm font-light';
+          if (item === '') {
+            // Elementos fantasma invisibles
+          } else if (diff === 0) {
+            textClass = 'text-slate-900 text-2xl font-bold';
+          } else if (diff === 1) {
+            textClass = 'text-slate-400 text-lg font-medium';
+          }
+          
+          return (
+            <View key={index} style={{ height: itemHeight, justifyContent: 'center', alignItems: 'center' }}>
+              <Text className={textClass}>{item}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
 export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -75,6 +174,21 @@ export default function App() {
   
   // Description editor state
   const [isEditingDesc, setIsEditingDesc] = useState(false);
+  
+  // Time picker states
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [pickerAmPm, setPickerAmPm] = useState<'AM' | 'PM'>('AM');
+  const [pickerHour, setPickerHour] = useState('08');
+  const [pickerMinute, setPickerMinute] = useState('30');
+  
+  // Duration picker states
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [pickerDurationHour, setPickerDurationHour] = useState('1h');
+  const [pickerDurationMin, setPickerDurationMin] = useState('30m');
+  
+  // Alert picker state
+  const [isEditingAlert, setIsEditingAlert] = useState(false);
+  
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -262,7 +376,7 @@ export default function App() {
                 <TextInput
                   value={taskTitle}
                   onChangeText={setTaskTitle}
-                  className="text-lg font-bold text-slate-900 bg-transparent p-0 m-0 flex-1"
+                  className="text-lg font-normal text-slate-900 bg-transparent p-0 m-0 flex-1"
                 />
                 
                 {/* Right: Pilar Selector */}
@@ -273,7 +387,7 @@ export default function App() {
                       className="flex-row items-center"
                       style={{ gap: 8 }}
                     >
-                      <Text className="text-base font-bold text-slate-500">
+                      <Text className="text-base font-normal text-slate-500">
                         {selectedPilar.charAt(0).toUpperCase() + selectedPilar.slice(1)}
                       </Text>
                       <View className="w-[28px] h-[28px] rounded-full" style={{ backgroundColor: PILLAR_COLORS[selectedPilar] }} />
@@ -333,42 +447,53 @@ export default function App() {
                   {activeTab === 'tareas' ? (
                     <>
                       {/* Hora de inicio */}
-                      <Text className="text-[13px] font-bold text-center text-slate-400 mb-1">Hora de inicio</Text>
-                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
-                        <Text className="text-[12px] font-medium text-slate-800">5:30</Text>
-                        <Text className="text-[12px] ml-1">🌅</Text>
-                      </View>
+                      <Text className="text-[13px] font-normal text-center text-slate-400 mb-1">Hora de inicio</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingTime(true)}
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">{startTime}</Text>
+                      </TouchableOpacity>
                       
                       {/* Recordar */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Recordar</Text>
-                      <View className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2">
-                        <Text className="text-[12px] font-medium text-slate-800">2m antes</Text>
-                      </View>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Recordar</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingAlert(true)}
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">{reminderBefore}</Text>
+                      </TouchableOpacity>
                       
                       {/* Guardar Button */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                       <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
-                        <Text className="text-[12px] font-bold text-slate-800">Guardar</Text>
+                        <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
                       {/* Hora */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Hora</Text>
-                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
-                        <Text className="text-[12px] font-medium text-slate-800">15:15</Text>
-                      </View>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Hora</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingTime(true)}
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">{reminderTime}</Text>
+                      </TouchableOpacity>
                       
                       {/* Recordar */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Recordar</Text>
-                      <View className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2">
-                        <Text className="text-[12px] font-medium text-slate-800">Al instante</Text>
-                      </View>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Recordar</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingAlert(true)}
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">{reminderBefore}</Text>
+                      </TouchableOpacity>
                       
                       {/* Guardar Button */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                       <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
-                        <Text className="text-[12px] font-bold text-slate-800">Guardar</Text>
+                        <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -379,13 +504,16 @@ export default function App() {
                   {activeTab === 'tareas' ? (
                     <>
                       {/* Duración */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Duración</Text>
-                      <View className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2">
-                        <Text className="text-[12px] font-medium text-slate-800">1 hr 30 m</Text>
-                      </View>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Duración</Text>
+                      <TouchableOpacity
+                        onPress={() => setIsEditingDuration(true)}
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                      >
+                        <Text className="text-[12px] font-medium text-slate-800">{duration}</Text>
+                      </TouchableOpacity>
                       
                       {/* Descripción */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Descripción</Text>
+                      <Text className="text-[13px] text-center font-botdext-slate-400 mb-1">Descripción</Text>
                       <TouchableOpacity
                         onPress={() => setIsEditingDesc(true)}
                         className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
@@ -399,22 +527,22 @@ export default function App() {
                       </TouchableOpacity>
                       
                       {/* Cancelar Button */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                       <TouchableOpacity
                         onPress={() => setIsFormOpen(false)}
                         className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
                       >
-                        <Text className="text-[12px] font-bold text-white">Cancel</Text>
+                        <Text className="text-[12px] font-normal text-white">Cancel</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
                       {/* Empty space for balance */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                       <View className="w-full h-[36px] mb-2" />
                       
                       {/* Descripción */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1">Descripción</Text>
+                      <Text className="text-[13px] text-center font-botdext-slate-400 mb-1">Descripción</Text>
                       <TouchableOpacity
                         onPress={() => setIsEditingDesc(true)}
                         className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
@@ -428,12 +556,12 @@ export default function App() {
                       </TouchableOpacity>
                       
                       {/* Cancelar Button */}
-                      <Text className="text-[13px] text-center font-bold text-slate-400 mb-1"> </Text>
+                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                       <TouchableOpacity
                         onPress={() => setIsFormOpen(false)}
                         className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
                       >
-                        <Text className="text-[12px] font-bold text-white">Cancel</Text>
+                        <Text className="text-[12px] font-normal text-white">Cancel</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -447,7 +575,7 @@ export default function App() {
                   exiting={FadeOut.duration(150)}
                   className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col"
                 >
-                  <Text className="text-sm font-bold text-slate-400 mb-2">Descripción de la Tarea</Text>
+                  <Text className="text-sm font-normal text-slate-400 mb-2">Descripción de la Tarea</Text>
                   <TextInput
                     className="flex-1 text-slate-900 text-sm py-2"
                     multiline
@@ -461,8 +589,134 @@ export default function App() {
                     onPress={() => setIsEditingDesc(false)}
                     className="w-full h-[36px] bg-[#3F3F3F] rounded-full justify-center items-center"
                   >
-                    <Text className="text-[12px] font-bold text-white">Listo</Text>
+                    <Text className="text-[12px] font-normal text-white">Listo</Text>
                   </TouchableOpacity>
+                </Animated.View>
+              )}
+              
+              {/* Time Picker Overlay */}
+              {isEditingTime && (
+                <Animated.View
+                  entering={FadeIn.duration(250)}
+                  exiting={FadeOut.duration(150)}
+                  className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col"
+                >
+                  <View className="flex-row items-center justify-between mb-4">
+                    <TouchableOpacity onPress={() => setIsEditingTime(false)}>
+                      <Text className="text-2xl font-normal text-slate-800">✕</Text>
+                    </TouchableOpacity>
+                    <Text className="text-lg font-normal text-slate-900">Hora de inicio</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const timeValue = `${pickerHour}:${pickerMinute} ${pickerAmPm}`;
+                        if (activeTab === 'tareas') {
+                          setStartTime(timeValue);
+                        } else {
+                          setReminderTime(timeValue);
+                        }
+                        setIsEditingTime(false);
+                      }}
+                    >
+                      <Text className="text-2xl font-normal text-slate-800">✓</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className="flex-1 flex-row justify-center items-center gap-4">
+                    <ScrollWheel
+
+                      items={['AM', 'PM']}
+                      selectedValue={pickerAmPm}
+                      onValueChange={(value) => setPickerAmPm(value as 'AM' | 'PM')}
+                    />
+                    <ScrollWheel
+                      items={['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']}
+                      selectedValue={pickerHour}
+                      onValueChange={setPickerHour}
+                    />
+                    <ScrollWheel
+                      items={['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']}
+                      selectedValue={pickerMinute}
+                      onValueChange={setPickerMinute}
+                    />
+                  </View>
+                </Animated.View>
+              )}
+              
+              {/* Duration Picker Overlay */}
+              {isEditingDuration && (
+                <Animated.View
+                  entering={FadeIn.duration(250)}
+                  exiting={FadeOut.duration(150)}
+                  className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col"
+                >
+                  <View className="flex-row items-center justify-between mb-4">
+                    <TouchableOpacity onPress={() => setIsEditingDuration(false)}>
+                      <Text className="text-2xl font-normal text-slate-800">✕</Text>
+                    </TouchableOpacity>
+                    <Text className="text-lg font-normal text-slate-900">Duración</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDuration(`${pickerDurationHour} ${pickerDurationMin}`);
+                        setIsEditingDuration(false);
+                      }}
+                    >
+                      <Text className="text-2xl font-normal text-slate-800">✓</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className="flex-1 flex-row justify-center items-center gap-4">
+                    <ScrollWheel
+                      items={['0h', '1h', '2h', '3h', '4h', '5h', '6h', '7h', '8h', '9h', '10h', '11h', '12h']}
+                      selectedValue={pickerDurationHour}
+                      onValueChange={setPickerDurationHour}
+                    />
+                    <ScrollWheel
+                      items={['00m', '05m', '10m', '15m', '20m', '25m', '30m', '45m', '50m', '55m']}
+                      selectedValue={pickerDurationMin}
+                      onValueChange={setPickerDurationMin}
+                    />
+                  </View>
+                </Animated.View>
+              )}
+              
+              {/* Alert Picker Overlay */}
+              {isEditingAlert && (
+                <Animated.View
+                  entering={FadeIn.duration(250)}
+                  exiting={FadeOut.duration(150)}
+                  className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col"
+                >
+                  <View className="flex-row items-center justify-between mb-2">
+                    <TouchableOpacity onPress={() => setIsEditingAlert(false)} className="p-2 -ml-2">
+                      <Text className="text-xl font-light text-slate-800">✕</Text>
+                    </TouchableOpacity>
+                    <Text className="text-sm font-normal text-slate-500">Notificación</Text>
+                    <View className="w-[30px]" />
+                  </View>
+                  
+                  {/* Grid Flex-Wrap Simétrico */}
+                  <View className="w-[280px] self-center mt-4 flex-row flex-wrap justify-between">
+                    {['Al instante', '2m antes', '5m antes', '10m antes', '15m antes', '30m antes'].map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => {
+                          setReminderBefore(option);
+                          setIsEditingAlert(false);
+                        }}
+                        className={`w-[125px] h-[36px] rounded-full justify-center items-center mb-5 shadow-sm ${
+                          reminderBefore === option
+                            ? 'bg-[#DFDFDF] border border-transparent'
+                            : 'bg-white border border-slate-100'
+                        }`}
+                      >
+                        <Text
+                          className={`text-[12px] ${
+                            reminderBefore === option ? 'font-normal text-slate-800' : 'font-medium text-slate-500'
+                          }`}
+                        >
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </Animated.View>
               )}
             </Animated.View>
