@@ -68,3 +68,39 @@ export const findFirstFreeSpace = (
 
   return currentAttempt;
 };
+
+// 5. Desglosa intervalos de slots (maneja bloques que cruzan la medianoche)
+export const getSlotsIntervals = (start: number, duration: number): { start: number, end: number }[] => {
+  const end = start + duration;
+  if (end <= 288) {
+    return [{ start, end }];
+  } else {
+    return [
+      { start, end: 288 },
+      { start: 0, end: end - 288 }
+    ];
+  }
+};
+
+// 6. Algoritmo de Colisión: Detecta si un nuevo bloque choca con bloques existentes
+export const checkCollision = (
+  newStart: number,
+  newDuration: number,
+  existingBlocks: { slotInicio: number, duracionSlots: number }[]
+): boolean => {
+  const newIntervals = getSlotsIntervals(newStart, newDuration);
+  
+  for (const block of existingBlocks) {
+    const blockIntervals = getSlotsIntervals(block.slotInicio, block.duracionSlots);
+    
+    for (const newInt of newIntervals) {
+      for (const blockInt of blockIntervals) {
+        // Si el bloque nuevo inicia antes de que el existente termine, Y el existente inicia antes de que el nuevo termine
+        if (newInt.start < blockInt.end && blockInt.start < newInt.end) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+};

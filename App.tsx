@@ -16,8 +16,9 @@ import Animated, {
   LinearTransition,
   FadeIn,
   FadeOut,
+  useDerivedValue,
 } from 'react-native-reanimated';
-import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace } from './src/features/timeline/transformers/timeMath';
+import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace, checkCollision } from './src/features/timeline/transformers/timeMath';
 
 const mockBlocks = [
   { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo' }, // 07:00 a 08:30 (Cuerpo - Naranja)
@@ -194,6 +195,10 @@ export default function App() {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
   const keyboardOffsetValue = useSharedValue(0);
+  
+  // Shared values for animated live block angles
+  const animatedStartAngle = useSharedValue(0);
+  const animatedSweepAngle = useSharedValue(0);
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
@@ -259,9 +264,39 @@ export default function App() {
   // Calcular el Bloque Vivo en Tiempo Real
   const liveSlotInicio = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
   const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
-  const liveStartAngle = 90 + liveSlotInicio * 1.25;
-  const liveSweepAngle = liveDuracionSlots * 1.25;
-  const livePath = createArcPath(137.5, 137.5, 103, liveStartAngle, liveSweepAngle);
+  const targetStartAngle = 90 + liveSlotInicio * 1.25;
+  const targetSweepAngle = liveDuracionSlots * 1.25;
+
+  useEffect(() => {
+    // Si es la primera vez que se abre, salta directo sin animación para no ver el bloque volar desde el slot 0
+    if (animatedStartAngle.value === 0) {
+      animatedStartAngle.value = targetStartAngle;
+      animatedSweepAngle.value = targetSweepAngle;
+    } else {
+      // Animación elástica estilo iOS
+      animatedStartAngle.value = withSpring(targetStartAngle, { mass: 0.8, damping: 15, stiffness: 120 });
+      animatedSweepAngle.value = withSpring(targetSweepAngle, { mass: 0.8, damping: 15, stiffness: 120 });
+    }
+  }, [targetStartAngle, targetSweepAngle]);
+
+  // Derivar el Path Animado (UI Thread) con worklet directive
+  const animatedLivePath = useDerivedValue(() => {
+    'worklet'; // 👑 Compila esta sección directamente para el hilo nativo de UI
+    const x = 137.5;
+    const y = 137.5;
+    const r = 103;
+    return Skia.PathBuilder.Make()
+      .addArc(
+        { x: x - r, y: y - r, width: r * 2, height: r * 2 }, 
+        animatedStartAngle.value, 
+        animatedSweepAngle.value
+      )
+      .build();
+  });
+
+  // Lógica de Colisión en Tiempo Real
+  const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, mockBlocks);
+  const liveColor = isColliding ? '#FF3B30' : PILLAR_COLORS[selectedPilar];
   
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -313,11 +348,11 @@ export default function App() {
             {/* Layer 3: Live Preview Block */}
             {isFormOpen && activeTab === 'tareas' && (
               <Path 
-                path={livePath} 
+                path={animatedLivePath} 
                 style="stroke" 
                 strokeWidth={69} 
                 strokeCap="butt" 
-                color={PILLAR_COLORS[selectedPilar]} 
+                color={liveColor} 
               />
             )}
             
@@ -505,7 +540,10 @@ export default function App() {
                       
                       {/* Guardar Button */}
                       <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
-                      <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
+                      <TouchableOpacity 
+                        disabled={isColliding}
+                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm ${isColliding ? 'opacity-40' : ''}`}
+                      >
                         <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
                       </TouchableOpacity>
                     </>
@@ -531,7 +569,10 @@ export default function App() {
                       
                       {/* Guardar Button */}
                       <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
-                      <TouchableOpacity className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm">
+                      <TouchableOpacity 
+                        disabled={isColliding}
+                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm ${isColliding ? 'opacity-40' : ''}`}
+                      >
                         <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
                       </TouchableOpacity>
                     </>
