@@ -17,6 +17,7 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
+import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace } from './src/features/timeline/transformers/timeMath';
 
 const mockBlocks = [
   { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo' }, // 07:00 a 08:30 (Cuerpo - Naranja)
@@ -223,6 +224,25 @@ export default function App() {
     }
   }, [isFormOpen, SCREEN_HEIGHT]);
 
+  const handleOpenForm = () => {
+    // Buscamos un hueco libre de 1 hora (12 slots) empezando a las 08:00 AM (slot 96)
+    const defaultDurationSlots = 12;
+    const freeSlot = findFirstFreeSpace(mockBlocks, defaultDurationSlots, 96);
+    const timeParts = slotToTimeParts(freeSlot);
+    
+    // Pre-llenamos los estados del formulario con el hueco encontrado
+    setPickerHour(timeParts.h);
+    setPickerMinute(timeParts.m);
+    setPickerAmPm(timeParts.ampm);
+    setStartTime(`${timeParts.h}:${timeParts.m} ${timeParts.ampm}`);
+    
+    setPickerDurationHour('1h');
+    setPickerDurationMin('00m');
+    setDuration('1h 00m');
+    
+    setIsFormOpen(true);
+  };
+
 
   const animatedCardStyle = useAnimatedStyle(() => {
     return {
@@ -235,6 +255,13 @@ export default function App() {
       opacity: backdropOpacity.value,
     };
   });
+
+  // Calcular el Bloque Vivo en Tiempo Real
+  const liveSlotInicio = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
+  const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
+  const liveStartAngle = 90 + liveSlotInicio * 1.25;
+  const liveSweepAngle = liveDuracionSlots * 1.25;
+  const livePath = createArcPath(137.5, 137.5, 103, liveStartAngle, liveSweepAngle);
   
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -268,7 +295,8 @@ export default function App() {
               const startAngle = 90 + block.slotInicio * 1.25;
               const sweepAngle = block.duracionSlots * 1.25;
               const path = createArcPath(137.5, 137.5, 103, startAngle, sweepAngle);
-              const color = PILLAR_COLORS[block.pilarTipo];
+              const baseColor = PILLAR_COLORS[block.pilarTipo];
+              const color = isFormOpen ? baseColor + '40' : baseColor; // Se opacan si el form está abierto
               
               return (
                 <Path
@@ -281,6 +309,17 @@ export default function App() {
                 />
               );
             })}
+            
+            {/* Layer 3: Live Preview Block */}
+            {isFormOpen && activeTab === 'tareas' && (
+              <Path 
+                path={livePath} 
+                style="stroke" 
+                strokeWidth={69} 
+                strokeCap="butt" 
+                color={PILLAR_COLORS[selectedPilar]} 
+              />
+            )}
             
             {/* Layer 4: Central Mask Circle */}
             <Circle c={vec(137.5, 137.5)} r={68.5} color="white" />
@@ -323,7 +362,7 @@ export default function App() {
       {!isFormOpen && (
         <TouchableOpacity
           className="absolute z-30 top-[365px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-slate-300 border border-white/20"
-          onPress={() => setIsFormOpen(true)}
+          onPress={handleOpenForm}
         >
           <Image
             source={require('./assets/plus.png')}
