@@ -385,6 +385,8 @@ export default function App() {
 
   const animatedSweepAngle = useSharedValue(0);
 
+  const animatedReminderRad = useSharedValue(0);
+
 
 
   useEffect(() => {
@@ -551,6 +553,8 @@ export default function App() {
 
   const targetSweepAngle = liveDuracionSlots * 1.25;
 
+  const targetReminderRad = ((90 + liveSlotInicio * 1.25) * Math.PI) / 180;
+
   // Cálculos para Recordatorio en Vivo
   const liveReminderRad = ((90 + liveSlotInicio * 1.25) * Math.PI) / 180;
   const cx = 175;
@@ -568,6 +572,8 @@ export default function App() {
 
       animatedSweepAngle.value = targetSweepAngle;
 
+      animatedReminderRad.value = targetReminderRad; // Salto inicial sin animación
+
     } else {
 
       // Animación elástica estilo iOS
@@ -576,9 +582,11 @@ export default function App() {
 
       animatedSweepAngle.value = withSpring(targetSweepAngle, { mass: 0.8, damping: 15, stiffness: 120 });
 
+      animatedReminderRad.value = withSpring(targetReminderRad, { mass: 0.8, damping: 15, stiffness: 120 }); // Órbita elástica
+
     }
 
-  }, [targetStartAngle, targetSweepAngle]);
+  }, [targetStartAngle, targetSweepAngle, targetReminderRad]);
 
 
 
@@ -608,6 +616,32 @@ export default function App() {
 
       .build();
 
+  });
+
+
+
+  // Derivar vectores animados para recordatorios (UI Thread)
+  const reminderLineP1 = useDerivedValue(() => {
+    'worklet';
+    return vec(175 + 68.5 * Math.cos(animatedReminderRad.value), 175 + 68.5 * Math.sin(animatedReminderRad.value));
+  });
+  const reminderLineP2 = useDerivedValue(() => {
+    'worklet';
+    return vec(175 + 137.5 * Math.cos(animatedReminderRad.value), 175 + 137.5 * Math.sin(animatedReminderRad.value));
+  });
+  const reminderCircleC = useDerivedValue(() => {
+    'worklet';
+    return vec(175 + 142.5 * Math.cos(animatedReminderRad.value), 175 + 142.5 * Math.sin(animatedReminderRad.value));
+  });
+
+  // Estilo animado para el texto del recordatorio
+  const animatedReminderTextStyle = useAnimatedStyle(() => {
+    const xText = 175 + 162 * Math.cos(animatedReminderRad.value);
+    const yText = 175 + 162 * Math.sin(animatedReminderRad.value);
+    return {
+      left: xText - 20,
+      top: yText - 8,
+    };
   });
 
 
@@ -721,19 +755,8 @@ export default function App() {
 
             {isFormOpen && activeTab === 'recordatorios' && (
               <>
-                {/* Línea desde el borde blanco (r=68.5) hasta el borde gris (r=137.5) */}
-                <Line 
-                  p1={vec(cx + 68.5 * Math.cos(liveReminderRad), cy + 68.5 * Math.sin(liveReminderRad))} 
-                  p2={vec(cx + 137.5 * Math.cos(liveReminderRad), cy + 137.5 * Math.sin(liveReminderRad))} 
-                  color={PILLAR_COLORS[selectedPilar]} 
-                  strokeWidth={2.5} 
-                />
-                {/* Punto en el borde exterior */}
-                <Circle 
-                  c={vec(cx + 142.5 * Math.cos(liveReminderRad), cy + 142.5 * Math.sin(liveReminderRad))} 
-                  r={5} 
-                  color={PILLAR_COLORS[selectedPilar]} 
-                />
+                <Line p1={reminderLineP1} p2={reminderLineP2} color={PILLAR_COLORS[selectedPilar]} strokeWidth={2.5} />
+                <Circle c={reminderCircleC} r={5} color={PILLAR_COLORS[selectedPilar]} />
               </>
             )}
 
@@ -834,15 +857,12 @@ export default function App() {
 
             {/* Texto del Recordatorio en Vivo */}
             {isFormOpen && activeTab === 'recordatorios' && (
-              <Text 
+              <Animated.Text 
                 className="absolute text-[11px] font-bold text-slate-800 text-center w-[40px] h-[16px]" 
-                style={{ 
-                  left: (cx + 162 * Math.cos(liveReminderRad)) - 20, 
-                  top: (cy + 162 * Math.sin(liveReminderRad)) - 8 
-                }}
+                style={animatedReminderTextStyle}
               >
                 {pickerHour}:{pickerMinute}
-              </Text>
+              </Animated.Text>
             )}
 
           </View>
