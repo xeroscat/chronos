@@ -12,7 +12,7 @@ import { Image, TouchableOpacity } from 'react-native';
 
 import { useState, useEffect } from 'react';
 
-import { Canvas, Circle, Path, Skia, vec, Line } from '@shopify/react-native-skia';
+import { Canvas, Circle, Path, Skia, vec, Line, Group } from '@shopify/react-native-skia';
 
 import Animated, {
 
@@ -387,6 +387,11 @@ export default function App() {
 
   const animatedReminderRad = useSharedValue(0);
 
+  // Shared values for opacity animations
+  const bgBlocksOpacity = useSharedValue(1);
+  const previewTaskOpacity = useSharedValue(0);
+  const previewReminderOpacity = useSharedValue(0);
+
 
 
   useEffect(() => {
@@ -588,6 +593,31 @@ export default function App() {
 
   }, [targetStartAngle, targetSweepAngle, targetReminderRad]);
 
+  // Opacity and shrink animation logic
+  useEffect(() => {
+    if (isFormOpen) {
+      // Fade out suave a los bloques de fondo
+      bgBlocksOpacity.value = withTiming(0.25, { duration: 300 });
+      
+      if (activeTab === 'tareas') {
+        previewTaskOpacity.value = withTiming(1, { duration: 250 });
+        previewReminderOpacity.value = withTiming(0, { duration: 250 });
+        // Expande el bloque a su tamaño real
+        animatedSweepAngle.value = withSpring(targetSweepAngle, { mass: 0.8, damping: 15, stiffness: 120 });
+      } else {
+        previewTaskOpacity.value = withTiming(0, { duration: 250 });
+        previewReminderOpacity.value = withTiming(1, { duration: 250 });
+        // Encoje el bloque hasta 0 para que desaparezca fluidamente
+        animatedSweepAngle.value = withSpring(0, { mass: 0.8, damping: 15, stiffness: 120 });
+      }
+    } else {
+      // Al cerrar el formulario, todo vuelve a la normalidad suavemente
+      bgBlocksOpacity.value = withTiming(1, { duration: 300 });
+      previewTaskOpacity.value = withTiming(0, { duration: 200 });
+      previewReminderOpacity.value = withTiming(0, { duration: 200 });
+    }
+  }, [isFormOpen, activeTab, targetSweepAngle]);
+
 
 
   // Derivar el Path Animado (UI Thread) con worklet directive
@@ -641,6 +671,7 @@ export default function App() {
     return {
       left: xText - 20,
       top: yText - 8,
+      opacity: previewReminderOpacity.value, // Fade in/out sincronizado
     };
   });
 
@@ -710,27 +741,26 @@ export default function App() {
 
             {/* Layer 2: Task Blocks */}
 
-            {blocks.map((block) => {
+            <Group opacity={bgBlocksOpacity}>
+              {blocks.map((block) => {
 
-              const startAngle = 90 + block.slotInicio * 1.25;
+                const startAngle = 90 + block.slotInicio * 1.25;
 
-              const sweepAngle = block.duracionSlots * 1.25;
+                const sweepAngle = block.duracionSlots * 1.25;
 
-              const path = createArcPath(175, 175, 103, startAngle, sweepAngle);
+                const path = createArcPath(175, 175, 103, startAngle, sweepAngle);
 
-              const baseColor = PILLAR_COLORS[block.pilarTipo];
+                const baseColor = PILLAR_COLORS[block.pilarTipo];
 
-              const color = isFormOpen ? baseColor + '40' : baseColor; // Se opacan si el form está abierto
+                
 
-              
+                return (
 
-              return (
+                  <Path
 
-                <Path
+                    key={block.blockId}
 
-                  key={block.blockId}
-
-                  path={path}
+                    path={path}
 
                   style="stroke"
 
@@ -738,27 +768,26 @@ export default function App() {
 
                   strokeCap="butt"
 
-                  color={color}
+                  color={baseColor}
 
                 />
 
               );
 
             })}
+            </Group>
 
             
 
             {/* Layer 3: Live Preview (Task or Reminder) */}
-            {isFormOpen && activeTab === 'tareas' && (
+            <Group opacity={previewTaskOpacity}>
               <Path path={animatedLivePath} style="stroke" strokeWidth={69} strokeCap="butt" color={liveColor} />
-            )}
+            </Group>
 
-            {isFormOpen && activeTab === 'recordatorios' && (
-              <>
-                <Line p1={reminderLineP1} p2={reminderLineP2} color={PILLAR_COLORS[selectedPilar]} strokeWidth={2.5} />
-                <Circle c={reminderCircleC} r={5} color={PILLAR_COLORS[selectedPilar]} />
-              </>
-            )}
+            <Group opacity={previewReminderOpacity}>
+              <Line p1={reminderLineP1} p2={reminderLineP2} color={PILLAR_COLORS[selectedPilar]} strokeWidth={2.5} />
+              <Circle c={reminderCircleC} r={5} color={PILLAR_COLORS[selectedPilar]} />
+            </Group>
 
             
 
@@ -856,14 +885,12 @@ export default function App() {
             })}
 
             {/* Texto del Recordatorio en Vivo */}
-            {isFormOpen && activeTab === 'recordatorios' && (
-              <Animated.Text 
-                className="absolute text-[11px] font-bold text-slate-800 text-center w-[40px] h-[16px]" 
-                style={animatedReminderTextStyle}
-              >
-                {pickerHour}:{pickerMinute}
-              </Animated.Text>
-            )}
+            <Animated.Text 
+              className="absolute text-[11px] font-bold text-slate-800 text-center w-[40px] h-[16px]" 
+              style={animatedReminderTextStyle}
+            >
+              {pickerHour}:{pickerMinute}
+            </Animated.Text>
 
           </View>
 
