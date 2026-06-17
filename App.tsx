@@ -82,28 +82,6 @@ const PILLAR_RADII: Record<string, number> = {
 
 
 
-const hoursData = [
-
-  { label: '12', left: 96, top: 140 }, // Abajo (00:00 / 24:00)
-
-  { label: '3',  left: 64.5, top: 127 },  // Abajo-Izquierda (03:00)
-
-  { label: '6',  left: 51.5, top: 96 },  // Izquierda (06:00)
-
-  { label: '9',  left: 64.5, top: 65 },  // Arriba-Izquierda (09:00)
-
-  { label: '12', left: 96, top: 51.5 },    // Arriba (12:00)
-
-  { label: '3',  left: 127.5, top: 65 },  // Arriba-Derecha (15:00)
-
-  { label: '6',  left: 140.5, top: 96 },  // Derecha (18:00)
-
-  { label: '9',  left: 127.5, top: 127 },  // Abajo-Derecha (21:00)
-
-];
-
-
-
 const createArcPath = (x: number, y: number, r: number, startAngle: number, sweepAngle: number) => {
 
   return Skia.PathBuilder.Make()
@@ -658,7 +636,7 @@ export default function App() {
 
       {/* Chart Block - 275px height, full width */}
 
-      <View className="flex-row items-center justify-between w-full h-[275px] mt-[15px]">
+      <View className="flex-row items-center justify-between w-full h-[275px] mt-[15px] mb-[35px] z-10">
 
         {/* Left Column - Sunrise Pill */}
 
@@ -771,6 +749,24 @@ export default function App() {
 
             <Line p1={vec(175, 175 + 68.5)} p2={vec(175, 175 + 137.5)} color="white" strokeWidth={3} />
 
+            {/* Layer 4.5: Tick Marks (Líneas de horas intermedias) */}
+            {Array.from({ length: 24 }).map((_, h) => {
+              if (h % 3 === 0) return null; // Saltamos las horas que llevan número
+              const rad = ((90 + h * 15) * Math.PI) / 180;
+              const rStart = 52;
+              const rEnd = 58;
+              return (
+                <Line 
+                  key={`tick-${h}`}
+                  p1={vec(175 + rStart * Math.cos(rad), 175 + rStart * Math.sin(rad))}
+                  p2={vec(175 + rEnd * Math.cos(rad), 175 + rEnd * Math.sin(rad))}
+                  color="#CBD5E1" 
+                  strokeWidth={1.5}
+                  strokeCap="round"
+                />
+              );
+            })}
+
             {/* Layer 5: Saved Reminders */}
             {reminders.map((reminder) => {
               const rad = ((90 + reminder.slot * 1.25) * Math.PI) / 180;
@@ -799,23 +795,26 @@ export default function App() {
 
           <View className="absolute items-center justify-center" style={{ width: 350, height: 350, left: -37.5, top: -37.5 }}>
 
-            {hoursData.map((hour, index) => (
-
-              <Text
-
-                key={`${hour.label}-${index}`}
-
-                style={{ left: hour.left, top: hour.top }}
-
-                className="absolute text-[12px] font-light text-slate-900 text-center w-[20px] h-[20px]"
-
-              >
-
-                {hour.label}
-
-              </Text>
-
-            ))}
+            {/* Guide Time Texts (Números del reloj) */}
+            {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => {
+              const rad = ((90 + h * 15) * Math.PI) / 180;
+              const rText = 52; // Radio interno para los números
+              const x = 175 + rText * Math.cos(rad);
+              const y = 175 + rText * Math.sin(rad);
+              
+              // Formato 12h: 0 y 12 son '12', los demás son h % 12
+              const label = (h === 0 || h === 12) ? '12' : (h % 12).toString();
+              
+              return (
+                <Text
+                  key={`hour-${h}`}
+                  style={{ left: x - 10, top: y - 10 }} // -10 para centrar la caja de 20x20
+                  className="absolute text-[12px] font-light text-slate-900 text-center w-[20px] h-[20px]"
+                >
+                  {label}
+                </Text>
+              );
+            })}
 
             {/* Textos de Recordatorios Guardados */}
             {reminders.map((reminder) => {
@@ -890,7 +889,7 @@ export default function App() {
 
         <TouchableOpacity
 
-          className="absolute z-30 top-[365px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-slate-300 border border-white/20"
+          className="absolute z-30 top-[400px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-slate-300 border border-white/20"
 
           onPress={handleOpenForm}
 
