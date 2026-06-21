@@ -44,11 +44,11 @@ import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace, check
 
 const mockBlocks = [
 
-  { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo', title: 'Rutina de Mañana', description: 'Ejercicio cardiovascular y estiramientos' }, // 07:00 a 08:30 (Cuerpo - Naranja)
+  { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo', title: 'Cuerpo y flojera', description: 'Ejercicio cardiovascular y estiramientos' }, // 07:00 a 08:30 (Cuerpo - Naranja)
 
-  { blockId: '2', slotInicio: 108, duracionSlots: 30, pilarTipo: 'productividad', title: 'Trabajo Profundo', description: 'Sesión de trabajo sin interrupciones' }, // 09:00 a 11:30 (Productividad - Amarillo)
+  { blockId: '2', slotInicio: 108, duracionSlots: 30, pilarTipo: 'productividad', title: 'Laburar', description: 'Sesión de trabajo sin interrupciones' }, // 09:00 a 11:30 (Productividad - Amarillo)
 
-  { blockId: '3', slotInicio: 252, duracionSlots: 24, pilarTipo: 'personal', title: 'Lectura Nocturna', description: 'Tiempo de lectura y reflexión' }, // 21:00 a 23:00 (Personal - Morado)
+  { blockId: '3', slotInicio: 252, duracionSlots: 24, pilarTipo: 'personal', title: 'Bloque vida personal', description: 'Tiempo de lectura y reflexión' }, // 21:00 a 23:00 (Personal - Morado)
 
 ];
 
@@ -327,6 +327,10 @@ export default function App() {
   // Expansion state for accordion
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
 
+  // Edit mode states
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+
   
 
   // Tarea states
@@ -499,7 +503,9 @@ export default function App() {
 
     setDuration('1h 00m');
 
-    
+    setEditingEventId(null);
+    setTaskTitle('Nueva Tarea');
+    setDescription('');
 
     setIsFormOpen(true);
 
@@ -512,7 +518,7 @@ export default function App() {
     }
 
     const newBlock = {
-      blockId: Date.now().toString(),
+      blockId: editingEventId || Date.now().toString(),
       slotInicio: liveSlotInicio,
       duracionSlots: liveDuracionSlots,
       pilarTipo: selectedPilar,
@@ -521,23 +527,75 @@ export default function App() {
       reminderBefore: reminderBefore,
     };
 
-    setBlocks(prev => [...prev, newBlock]);
+    if (editingEventId) {
+      setBlocks(prev => prev.map(b => b.blockId === editingEventId ? { ...newBlock, blockId: editingEventId } : b));
+    } else {
+      setBlocks(prev => [...prev, newBlock]);
+    }
+    setEditingEventId(null);
     setDescription('');
     setIsFormOpen(false);
   };
 
   const handleSaveReminder = () => {
     const newReminder = {
-      id: Date.now().toString(),
+      id: editingEventId || Date.now().toString(),
       slot: timeToSlot(pickerHour, pickerMinute, pickerAmPm),
       descripcion: reminderDesc,
       pilarTipo: selectedPilar,
       timeLabel: `${pickerHour}:${pickerMinute} ${pickerAmPm}`,
     };
 
-    setReminders(prev => [...prev, newReminder]);
+    if (editingEventId) {
+      setReminders(prev => prev.map(r => r.id === editingEventId ? { ...newReminder, id: editingEventId } : r));
+    } else {
+      setReminders(prev => [...prev, newReminder]);
+    }
+    setEditingEventId(null);
     setReminderDesc('');
     setIsFormOpen(false);
+  };
+
+  const handleDeleteEvent = (id: string, type: 'task' | 'reminder') => {
+    if (type === 'task') {
+      setBlocks(prev => prev.filter(b => b.blockId !== id));
+    } else {
+      setReminders(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
+  const handleEditEvent = (event: any) => {
+    setEditingEventId(event.type === 'task' ? event.blockId : event.id);
+    setActiveTab(event.type === 'task' ? 'tareas' : 'recordatorios');
+    setSelectedPilar(event.pilarTipo);
+
+    if (event.type === 'task') {
+      setTaskTitle(event.title || 'Nueva Tarea');
+      setDescription(event.description || '');
+      setReminderBefore(event.reminderBefore || '5m');
+
+      const timeParts = slotToTimeParts(event.slotInicio);
+      setPickerHour(timeParts.h);
+      setPickerMinute(timeParts.m);
+      setPickerAmPm(timeParts.ampm);
+      setStartTime(`${timeParts.h}:${timeParts.m} ${timeParts.ampm}`);
+
+      const durH = Math.floor((event.duracionSlots * 5) / 60);
+      const durM = (event.duracionSlots * 5) % 60;
+      setPickerDurationHour(`${durH}h`);
+      setPickerDurationMin(`${durM.toString().padStart(2, '0')}m`);
+      setDuration(`${durH}h ${durM.toString().padStart(2, '0')}m`);
+    } else {
+      setReminderDesc(event.descripcion || '');
+      const timeParts = slotToTimeParts(event.slot);
+      setPickerHour(timeParts.h);
+      setPickerMinute(timeParts.m);
+      setPickerAmPm(timeParts.ampm);
+      setReminderTime(`${timeParts.h}:${timeParts.m} ${timeParts.ampm}`);
+    }
+
+    setIsFormOpen(true);
+    setIsEditMode(false);
   };
 
 
@@ -699,7 +757,8 @@ export default function App() {
 
   // Lógica de Colisión en Tiempo Real
 
-  const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, blocks);
+  const activeBlocksForCollision = blocks.filter(b => b.blockId !== editingEventId);
+  const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeBlocksForCollision);
 
   const liveColor = isColliding ? '#FF3B30' : PILLAR_COLORS[selectedPilar];
 
@@ -762,7 +821,7 @@ export default function App() {
             {/* Layer 2: Task Blocks */}
 
             <Group opacity={bgBlocksOpacity}>
-              {blocks.map((block) => {
+              {activeBlocksForCollision.map((block) => {
 
                 const startAngle = 90 + block.slotInicio * 1.25;
 
@@ -952,12 +1011,15 @@ export default function App() {
             {/* Panel Header */}
             <View className="flex-row justify-between items-center w-full mb-4">
               <Text className="text-[17px] font-bold text-black/50">Siguientes tareas</Text>
-              <TouchableOpacity className="w-[44px] h-[44px] bg-white rounded-full items-center justify-center ">
-                <Image 
-                  source={require('./assets/edit.png')} 
-                  style={{ width: 18, height: 18 }}
-                  resizeMode="contain"
-                />
+              <TouchableOpacity
+                onPress={() => setIsEditMode(!isEditMode)}
+                className="w-[44px] h-[44px] bg-white rounded-full items-center justify-center border-[3px] border-slate-200"
+              >
+                {isEditMode ? (
+                  <Text className="text-slate-800 font-bold text-lg">✓</Text>
+                ) : (
+                  <Image source={require('./assets/edit.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                )}
               </TouchableOpacity>
             </View>
 
@@ -1028,20 +1090,30 @@ export default function App() {
                 >
                   <TouchableOpacity
                     activeOpacity={0.7}
-                    onPress={() => setExpandedBlockId(expandedBlockId === block.blockId ? null : block.blockId)}
+                    onPress={() => isEditMode ? handleEditEvent(event) : setExpandedBlockId(expandedBlockId === block.blockId ? null : block.blockId)}
                     className="w-full min-h-[52px] flex-row items-center justify-between px-4 py-3"
                   >
                     <Text className="text-sm font-bold text-white" numberOfLines={1} ellipsizeMode="tail">
                       {block.title}
                     </Text>
-                    {isActive ? (
-                      <View className="flex-row items-center">
-                        <View className="w-2 h-2 bg-white rounded-full mr-2" />
-                        <Text className="text-sm font-bold text-white">{countdown}</Text>
-                      </View>
-                    ) : (
-                      <Text className="text-[11px] text-white/80 font-medium">{timeRange}</Text>
-                    )}
+                    <View className="flex-row items-center">
+                      {isActive ? (
+                        <>
+                          <View className="w-2 h-2 bg-white rounded-full mr-2" />
+                          <Text className="text-sm font-bold text-white">{countdown}</Text>
+                        </>
+                      ) : (
+                        <Text className="text-[11px] text-white/80 font-medium">{timeRange}</Text>
+                      )}
+                      {isEditMode && (
+                        <TouchableOpacity
+                          onPress={() => handleDeleteEvent(event.blockId, 'task')}
+                          className="w-[28px] h-[28px] bg-red-500 rounded-full items-center justify-center ml-2 border-2 border-white"
+                        >
+                          <Text className="text-white font-bold text-xs">✕</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </TouchableOpacity>
                   {expandedBlockId === block.blockId && (
                     <Animated.View
@@ -1054,9 +1126,8 @@ export default function App() {
                       </Text>
                       <View className="w-full bg-black/15 rounded-lg p-3 flex-row items-center justify-between">
                         <View className="flex-row items-center">
-                          <Text className="text-white text-lg mr-2">📎</Text>
                           <Text className="text-white/90 text-[11px] font-bold uppercase tracking-wider">
-                            Recursos Adjuntos
+                            recursos adjuntost
                           </Text>
                         </View>
                         <Text className="text-white/50 text-[10px] font-bold">PRÓXIMAMENTE</Text>
@@ -1069,14 +1140,25 @@ export default function App() {
                     const reminder = event as any;
                     const isPast = currentSlot > reminder.slot;
                     return (
-                      <View
+                      <TouchableOpacity
                         key={reminder.id}
+                        onPress={() => isEditMode && handleEditEvent(event)}
                         className={`w-full h-[42px] border-[3px] border-white rounded-[25px] flex-row items-center justify-between px-4 mb-3 ${isPast ? 'opacity-40' : ''}`}
                         style={{ backgroundColor: PILLAR_COLORS[reminder.pilarTipo] }}
                       >
                         <Text className="text-sm font-bold text-white">{reminder.descripcion || 'Recordatorio'}</Text>
-                        <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
-                      </View>
+                        <View className="flex-row items-center">
+                          <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
+                          {isEditMode && (
+                            <TouchableOpacity
+                              onPress={() => handleDeleteEvent(reminder.id, 'reminder')}
+                              className="w-[28px] h-[28px] bg-red-500 rounded-full items-center justify-center ml-2 border-2 border-white"
+                            >
+                              <Text className="text-white font-bold text-xs">✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </TouchableOpacity>
                     );
                   }
                 });
@@ -1127,7 +1209,10 @@ export default function App() {
 
           <Pressable
 
-            onPress={() => setIsFormOpen(false)}
+            onPress={() => {
+              setIsFormOpen(false);
+              setEditingEventId(null);
+            }}
 
             className="absolute inset-0 z-40"
 
@@ -1521,7 +1606,10 @@ export default function App() {
 
                       <TouchableOpacity
 
-                        onPress={() => setIsFormOpen(false)}
+                        onPress={() => {
+                          setIsFormOpen(false);
+                          setEditingEventId(null);
+                        }}
 
                         className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center "
 
@@ -1579,7 +1667,10 @@ export default function App() {
 
                       <TouchableOpacity
 
-                        onPress={() => setIsFormOpen(false)}
+                        onPress={() => {
+                          setIsFormOpen(false);
+                          setEditingEventId(null);
+                        }}
 
                         className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center "
 
