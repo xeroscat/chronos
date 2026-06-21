@@ -44,11 +44,11 @@ import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace, check
 
 const mockBlocks = [
 
-  { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo' }, // 07:00 a 08:30 (Cuerpo - Naranja)
+  { blockId: '1', slotInicio: 84, duracionSlots: 18, pilarTipo: 'cuerpo', title: 'Rutina de Mañana', description: 'Ejercicio cardiovascular y estiramientos' }, // 07:00 a 08:30 (Cuerpo - Naranja)
 
-  { blockId: '2', slotInicio: 108, duracionSlots: 30, pilarTipo: 'productividad' }, // 09:00 a 11:30 (Productividad - Amarillo)
+  { blockId: '2', slotInicio: 108, duracionSlots: 30, pilarTipo: 'productividad', title: 'Trabajo Profundo', description: 'Sesión de trabajo sin interrupciones' }, // 09:00 a 11:30 (Productividad - Amarillo)
 
-  { blockId: '3', slotInicio: 252, duracionSlots: 24, pilarTipo: 'personal' }, // 21:00 a 23:00 (Personal - Morado)
+  { blockId: '3', slotInicio: 252, duracionSlots: 24, pilarTipo: 'personal', title: 'Lectura Nocturna', description: 'Tiempo de lectura y reflexión' }, // 21:00 a 23:00 (Personal - Morado)
 
 ];
 
@@ -270,7 +270,7 @@ const ScrollWheel: React.FC<ScrollWheelProps> = ({
 
           return (
 
-            <View key={index} style={{ height: itemHeight, justifyContent: 'center', alignItems: 'center' }}>
+            <View key={index} pointerEvents="none" style={{ height: itemHeight, justifyContent: 'center', alignItems: 'center' }}>
 
               <Text className={textClass}>{item}</Text>
 
@@ -323,6 +323,9 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Expansion state for accordion
+  const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
 
   
 
@@ -513,6 +516,9 @@ export default function App() {
       slotInicio: liveSlotInicio,
       duracionSlots: liveDuracionSlots,
       pilarTipo: selectedPilar,
+      title: taskTitle,
+      description: description,
+      reminderBefore: reminderBefore,
     };
 
     setBlocks(prev => [...prev, newBlock]);
@@ -749,7 +755,7 @@ export default function App() {
 
             {/* Layer 1: Base Circle */}
 
-            <Circle c={vec(175, 175)} r={137.5} color="#DFDFDF" />
+            <Circle c={vec(175, 175)} r={137.5} color="#D9D9D9" />
 
             
 
@@ -942,11 +948,11 @@ export default function App() {
 
       <View className="flex-1 bg-white items-center pt-4 pb-8">
         {!isFormOpen && (
-          <View className="w-[322px] bg-[#E0E0E0] rounded-[28px] p-5 shadow-inner flex-1 flex-col">
+          <View className="w-[322px] bg-[#D9D9D9] rounded-[28px] p-5  flex-1 flex-col">
             {/* Panel Header */}
             <View className="flex-row justify-between items-center w-full mb-4">
-              <Text className="text-[17px] font-bold text-slate-600">Siguientes tareas</Text>
-              <TouchableOpacity className="w-[44px] h-[44px] bg-white rounded-full items-center justify-center shadow-md">
+              <Text className="text-[17px] font-bold text-black/50">Siguientes tareas</Text>
+              <TouchableOpacity className="w-[44px] h-[44px] bg-white rounded-full items-center justify-center ">
                 <Image 
                   source={require('./assets/edit.png')} 
                   style={{ width: 18, height: 18 }}
@@ -956,12 +962,34 @@ export default function App() {
             </View>
 
             {/* Task List */}
-            <ScrollView 
-              className="flex-1 w-full" 
+            <ScrollView
+              className="flex-1 w-full"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}
+              contentContainerStyle={{ paddingBottom: 10 }}
             >
-              {blocks.map((block) => {
+              {(() => {
+                const unifiedEvents = [
+                  ...blocks.map(b => ({ ...b, type: 'task', sortSlot: b.slotInicio })),
+                  ...reminders.map(r => ({ ...r, type: 'reminder', sortSlot: r.slot }))
+                ];
+
+                const sortedEvents = unifiedEvents.sort((a, b) => {
+                  const aIsActive = a.type === 'task' && currentSlot >= a.slotInicio && currentSlot < (a.slotInicio + a.duracionSlots);
+                  const bIsActive = b.type === 'task' && currentSlot >= b.slotInicio && currentSlot < (b.slotInicio + b.duracionSlots);
+
+                  const aIsPast = a.type === 'task' ? (a.slotInicio + a.duracionSlots <= currentSlot) : (a.sortSlot <= currentSlot);
+                  const bIsPast = b.type === 'task' ? (b.slotInicio + b.duracionSlots <= currentSlot) : (b.sortSlot <= currentSlot);
+
+                  if (aIsActive && !bIsActive) return -1;
+                  if (!aIsActive && bIsActive) return 1;
+                  if (!aIsPast && bIsPast) return -1;
+                  if (aIsPast && !bIsPast) return 1;
+                  return a.sortSlot - b.sortSlot;
+                });
+
+                return sortedEvents.map((event) => {
+                  if (event.type === 'task') {
+                    const block = event as any;
               const isActive = currentSlot >= block.slotInicio && currentSlot < (block.slotInicio + block.duracionSlots);
               const opacity = isActive ? 1 : 0.4;
               
@@ -988,43 +1016,72 @@ export default function App() {
                 timeRange = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')} - ${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
               }
 
-              return (
-                <TouchableOpacity
-                  key={block.blockId}
-                  className="w-full h-[52px] rounded-full flex-row items-center justify-between px-4 mb-2 shadow-md"
-                  style={{ backgroundColor: PILLAR_COLORS[block.pilarTipo], opacity }}
-                >
-                  <Text className="text-sm font-bold text-white">
-                    {block.pilarTipo === 'cuerpo' ? 'Hacer Ejercicio' : 
-                     block.pilarTipo === 'mente' ? 'Meditación' : 
-                     block.pilarTipo === 'productividad' ? 'Trabajar' : 'Tiempo Personal'}
-                  </Text>
-                  {isActive ? (
-                    <View className="flex-row items-center">
-                      <View className="w-2 h-2 bg-white rounded-full mr-2" />
-                      <Text className="text-sm font-bold text-white">{countdown}</Text>
-                    </View>
-                  ) : (
-                    <Text className="text-[11px] text-white/80 font-medium">{timeRange}</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+              const aEnd = block.slotInicio + block.duracionSlots;
+              const isPast = aEnd <= currentSlot;
 
-            {/* Reminder List */}
-            {reminders.map((reminder) => {
-              const isPast = currentSlot > reminder.slot;
               return (
-                <TouchableOpacity
-                  key={reminder.id}
-                  className={`w-full h-[42px] border border-white/40 rounded-xl flex-row items-center justify-between px-4 mb-2 shadow-md ${isPast ? 'opacity-40' : ''}`}
-                  style={{ backgroundColor: PILLAR_COLORS[reminder.pilarTipo] + 'CC' }}
+                <Animated.View
+                  key={block.blockId}
+                  layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)}
+                  className={`w-full rounded-[28px]  mb-3  overflow-hidden ${!isActive && isPast ? 'opacity-40' : (!isActive ? 'opacity-80' : '')}`}
+                  style={{ backgroundColor: PILLAR_COLORS[block.pilarTipo] }}
                 >
-                  <Text className="text-sm font-bold text-white">{reminder.desc || 'Recordatorio'}</Text>
-                  <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setExpandedBlockId(expandedBlockId === block.blockId ? null : block.blockId)}
+                    className="w-full min-h-[52px] flex-row items-center justify-between px-4 py-3"
+                  >
+                    <Text className="text-sm font-bold text-white" numberOfLines={1} ellipsizeMode="tail">
+                      {block.title}
+                    </Text>
+                    {isActive ? (
+                      <View className="flex-row items-center">
+                        <View className="w-2 h-2 bg-white rounded-full mr-2" />
+                        <Text className="text-sm font-bold text-white">{countdown}</Text>
+                      </View>
+                    ) : (
+                      <Text className="text-[11px] text-white/80 font-medium">{timeRange}</Text>
+                    )}
+                  </TouchableOpacity>
+                  {expandedBlockId === block.blockId && (
+                    <Animated.View
+                      entering={FadeIn.duration(200)}
+                      exiting={FadeOut.duration(150)}
+                      className="px-4 pb-4 pt-1 border-t border-white/20"
+                    >
+                      <Text className="text-white/90 text-[13px] leading-5 mb-3">
+                        {block.description || 'Sin descripción detallada.'}
+                      </Text>
+                      <View className="w-full bg-black/15 rounded-lg p-3 flex-row items-center justify-between">
+                        <View className="flex-row items-center">
+                          <Text className="text-white text-lg mr-2">📎</Text>
+                          <Text className="text-white/90 text-[11px] font-bold uppercase tracking-wider">
+                            Recursos Adjuntos
+                          </Text>
+                        </View>
+                        <Text className="text-white/50 text-[10px] font-bold">PRÓXIMAMENTE</Text>
+                      </View>
+                    </Animated.View>
+                  )}
+                </Animated.View>
               );
-            })}
+                  } else {
+                    const reminder = event as any;
+                    const isPast = currentSlot > reminder.slot;
+                    return (
+                      <View
+                        key={reminder.id}
+                        className={`w-full h-[42px] border-[3px] border-white rounded-[25px] flex-row items-center justify-between px-4 mb-3 ${isPast ? 'opacity-40' : ''}`}
+                        style={{ backgroundColor: PILLAR_COLORS[reminder.pilarTipo] }}
+                      >
+                        <Text className="text-sm font-bold text-white">{reminder.descripcion || 'Recordatorio'}</Text>
+                        <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
+                      </View>
+                    );
+                  }
+                });
+              })()}
+
             </ScrollView>
           </View>
         )}
@@ -1038,7 +1095,7 @@ export default function App() {
 
         <TouchableOpacity
 
-          className="absolute z-30 top-[400px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-slate-300 border border-white/20"
+          className="absolute z-30 top-[350px] right-[35px] w-[44px] h-[44px] rounded-full items-center justify-center bg-white border-[3px] border-slate-200"
 
           onPress={handleOpenForm}
 
@@ -1094,7 +1151,7 @@ export default function App() {
 
               style={[animatedCardStyle]}
 
-              className="w-[322px] min-h-[350px] bg-[#E0E0E0] rounded-[24px] shadow-2xl border border-black/5 p-0 overflow-hidden mb-6"
+              className="w-[322px] min-h-[350px] bg-[#D9D9D9] rounded-[24px]  border border-black/5 p-0 overflow-hidden mb-6"
 
             >
 
@@ -1110,7 +1167,7 @@ export default function App() {
 
               >
 
-                <Text className={activeTab === 'tareas' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-slate-500'}>Tarea</Text>
+                <Text className={activeTab === 'tareas' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-black/50'}>Tarea</Text>
 
               </TouchableOpacity>
 
@@ -1122,7 +1179,7 @@ export default function App() {
 
               >
 
-                <Text className={activeTab === 'recordatorios' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-slate-500'}>Recordatorio</Text>
+                <Text className={activeTab === 'recordatorios' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-black/50'}>Recordatorio</Text>
 
               </TouchableOpacity>
 
@@ -1168,7 +1225,7 @@ export default function App() {
 
                     >
 
-                      <Text className="text-base font-normal text-slate-500">
+                      <Text className="text-base font-normal text-black/50">
 
                         {selectedPilar.charAt(0).toUpperCase() + selectedPilar.slice(1)}
 
@@ -1288,13 +1345,13 @@ export default function App() {
 
                       {/* Hora de inicio */}
 
-                      <Text className="text-[13px] font-normal text-center text-slate-400 mb-1">Hora de inicio</Text>
+                      <Text className="text-[13px] font-normal text-center text-black/50 mb-1">Hora de inicio</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingTime(true)}
 
-                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1306,13 +1363,13 @@ export default function App() {
 
                       {/* Recordar */}
 
-                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Recordar</Text>
+                      <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Recordar</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingAlert(true)}
 
-                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1330,7 +1387,7 @@ export default function App() {
 
                         onPress={handleSaveTask}
 
-                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm ${isColliding ? 'opacity-40' : ''}`}
+                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  ${isColliding ? 'opacity-40' : ''}`}
 
                       >
 
@@ -1346,13 +1403,13 @@ export default function App() {
 
                       {/* Hora */}
 
-                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Hora</Text>
+                      <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Hora</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingTime(true)}
 
-                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1364,13 +1421,13 @@ export default function App() {
 
                       {/* Recordar */}
 
-                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Recordar</Text>
+                      <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Recordar</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingAlert(true)}
 
-                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1388,7 +1445,7 @@ export default function App() {
 
                         onPress={handleSaveReminder}
 
-                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm ${isColliding ? 'opacity-40' : ''}`}
+                        className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  ${isColliding ? 'opacity-40' : ''}`}
 
                       >
 
@@ -1414,13 +1471,13 @@ export default function App() {
 
                       {/* Duración */}
 
-                      <Text className="text-[13px] text-center font-normal text-slate-400 mb-1">Duración</Text>
+                      <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Duración</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingDuration(true)}
 
-                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1432,13 +1489,13 @@ export default function App() {
 
                       {/* Descripción */}
 
-                      <Text className="text-[13px] text-center font-botdext-slate-400 mb-1">Descripción</Text>
+                      <Text className="text-[13px] text-center font-botdext-black/50 mb-1">Descripción</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingDesc(true)}
 
-                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1466,7 +1523,7 @@ export default function App() {
 
                         onPress={() => setIsFormOpen(false)}
 
-                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
+                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center "
 
                       >
 
@@ -1490,13 +1547,13 @@ export default function App() {
 
                       {/* Descripción */}
 
-                      <Text className="text-[13px] text-center font-botdext-slate-400 mb-1">Descripción</Text>
+                      <Text className="text-[13px] text-center font-botdext-black/50 mb-1">Descripción</Text>
 
                       <TouchableOpacity
 
                         onPress={() => setIsEditingDesc(true)}
 
-                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center shadow-sm mb-2"
+                        className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center  mb-2"
 
                       >
 
@@ -1524,7 +1581,7 @@ export default function App() {
 
                         onPress={() => setIsFormOpen(false)}
 
-                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center shadow-sm"
+                        className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center "
 
                       >
 
@@ -1556,7 +1613,7 @@ export default function App() {
 
                 >
 
-                  <Text className="text-sm font-normal text-slate-400 mb-2">Descripción de la Tarea</Text>
+                  <Text className="text-sm font-normal text-black/50 mb-2">Descripción de la Tarea</Text>
 
                   <TextInput
 
@@ -1808,7 +1865,7 @@ export default function App() {
 
                         }}
 
-                        className={`w-[125px] h-[36px] rounded-full justify-center items-center mb-5 shadow-sm ${
+                        className={`w-[125px] h-[36px] rounded-full justify-center items-center mb-5  ${
 
                           reminderBefore === option
 
