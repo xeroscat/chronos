@@ -310,6 +310,20 @@ export default function App() {
   const [blocks, setBlocks] = useState(mockBlocks);
   const [reminders, setReminders] = useState<any[]>([]);
 
+  // Real-time clock state
+  const [currentSlot, setCurrentSlot] = useState(0);
+  const [nowDate, setNowDate] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date();
+      setNowDate(d);
+      const slot = Math.floor(((d.getHours() * 60) + d.getMinutes()) / 5);
+      setCurrentSlot(slot);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   
 
   // Tarea states
@@ -926,7 +940,95 @@ export default function App() {
 
       {/* TAB Info - Flex 1 */}
 
-      <View className="flex-1 bg-slate-50" />
+      <View className="flex-1 bg-white items-center pt-4 pb-8">
+        {!isFormOpen && (
+          <View className="w-[322px] bg-[#E0E0E0] rounded-[28px] p-5 shadow-inner flex-1 flex-col">
+            {/* Panel Header */}
+            <View className="flex-row justify-between items-center w-full mb-4">
+              <Text className="text-[17px] font-bold text-slate-600">Siguientes tareas</Text>
+              <TouchableOpacity className="w-[44px] h-[44px] bg-white rounded-full items-center justify-center shadow-md">
+                <Image 
+                  source={require('./assets/edit.png')} 
+                  style={{ width: 18, height: 18 }}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Task List */}
+            <ScrollView 
+              className="flex-1 w-full" 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {blocks.map((block) => {
+              const isActive = currentSlot >= block.slotInicio && currentSlot < (block.slotInicio + block.duracionSlots);
+              const opacity = isActive ? 1 : 0.4;
+              
+              // Calculate countdown for active tasks
+              let countdown = '';
+              if (isActive) {
+                const endSlot = block.slotInicio + block.duracionSlots;
+                const endTime = endSlot * 5 * 60;
+                const currentTime = (nowDate.getHours() * 3600) + (nowDate.getMinutes() * 60) + nowDate.getSeconds();
+                const remainingSeconds = endTime - currentTime;
+                const minutes = Math.floor(remainingSeconds / 60);
+                const seconds = remainingSeconds % 60;
+                countdown = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+              }
+
+              // Calculate time range for inactive tasks
+              let timeRange = '';
+              if (!isActive) {
+                const startHour = Math.floor((block.slotInicio * 5) / 60);
+                const startMin = (block.slotInicio * 5) % 60;
+                const endSlot = block.slotInicio + block.duracionSlots;
+                const endHour = Math.floor((endSlot * 5) / 60);
+                const endMin = (endSlot * 5) % 60;
+                timeRange = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')} - ${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+              }
+
+              return (
+                <TouchableOpacity
+                  key={block.blockId}
+                  className="w-full h-[52px] rounded-full flex-row items-center justify-between px-4 mb-2 shadow-md"
+                  style={{ backgroundColor: PILLAR_COLORS[block.pilarTipo], opacity }}
+                >
+                  <Text className="text-sm font-bold text-white">
+                    {block.pilarTipo === 'cuerpo' ? 'Hacer Ejercicio' : 
+                     block.pilarTipo === 'mente' ? 'Meditación' : 
+                     block.pilarTipo === 'productividad' ? 'Trabajar' : 'Tiempo Personal'}
+                  </Text>
+                  {isActive ? (
+                    <View className="flex-row items-center">
+                      <View className="w-2 h-2 bg-white rounded-full mr-2" />
+                      <Text className="text-sm font-bold text-white">{countdown}</Text>
+                    </View>
+                  ) : (
+                    <Text className="text-[11px] text-white/80 font-medium">{timeRange}</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Reminder List */}
+            {reminders.map((reminder) => {
+              const isPast = currentSlot > reminder.slot;
+              return (
+                <TouchableOpacity
+                  key={reminder.id}
+                  className={`w-full h-[42px] border border-white/40 rounded-xl flex-row items-center justify-between px-4 mb-2 shadow-md ${isPast ? 'opacity-40' : ''}`}
+                  style={{ backgroundColor: PILLAR_COLORS[reminder.pilarTipo] + 'CC' }}
+                >
+                  <Text className="text-sm font-bold text-white">{reminder.desc || 'Recordatorio'}</Text>
+                  <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            </ScrollView>
+          </View>
+        )}
+      </View>
 
       
 
