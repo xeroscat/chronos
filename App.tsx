@@ -12,7 +12,7 @@ import { Image, TouchableOpacity } from 'react-native';
 
 import { useState, useEffect } from 'react';
 
-import { Canvas, Circle, Path, Skia, vec, Line, Group } from '@shopify/react-native-skia';
+import { Canvas, Circle, Path, Skia, vec, Line, Group, FractalNoise, ColorMatrix } from '@shopify/react-native-skia';
 
 import Animated, {
 
@@ -80,6 +80,13 @@ const PILLAR_RADII: Record<string, number> = {
 
 };
 
+const GRAYSCALE_MATRIX = [
+  0.33, 0.33, 0.33, 0, 0,
+  0.33, 0.33, 0.33, 0, 0,
+  0.33, 0.33, 0.33, 0, 0,
+  0, 0, 0, 1, 0,
+];
+
 
 
 const createArcPath = (x: number, y: number, r: number, startAngle: number, sweepAngle: number) => {
@@ -90,6 +97,13 @@ const createArcPath = (x: number, y: number, r: number, startAngle: number, swee
 
     .build();
 
+};
+
+const getFormattedDate = () => {
+  const d = new Date();
+  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
 };
 
 
@@ -643,6 +657,16 @@ export default function App() {
   const cx = 175;
   const cy = 175;
 
+  // Cálculos del Tiempo Actual (Aguja y Sombra)
+  // Convertimos la hora a minutos totales, incluyendo los segundos como decimales para un movimiento fluido
+  const currentMinuteFloat = nowDate.getHours() * 60 + nowDate.getMinutes() + (nowDate.getSeconds() / 60);
+  const currentAngle = 90 + (currentMinuteFloat * 0.25); // 0.25 grados por minuto (360 / 1440)
+  const currentRad = (currentAngle * Math.PI) / 180;
+
+  // Path para la sombra del tiempo transcurrido (Desde las 00:00 hasta la hora actual)
+  const passedTimeSweep = currentMinuteFloat * 0.25;
+  const passedTimePath = createArcPath(175, 175, 103, 90, passedTimeSweep);
+
 
 
   useEffect(() => {
@@ -772,9 +796,13 @@ export default function App() {
 
       
 
-      {/* Header Block - 50px height */}
-
-      <View className="w-full h-[55px] bg-white" />
+      {/* Header Block - 55px height, mathematically aligned */}
+      <View className="w-full h-[55px] bg-white flex-row justify-between items-center px-[26px]">
+        <Text className="text-[22px] font-bold text-black">Chronos</Text>
+        <Text className="text-[15px] font-normal text-black/60">
+          {getFormattedDate()}
+        </Text>
+      </View>
 
       
 
@@ -858,6 +886,20 @@ export default function App() {
 
             
 
+            {/* Layer 2.5: Tiempo Transcurrido (Sombra + Ruido) */}
+            <Group opacity={bgBlocksOpacity}>
+              {/* Base oscura semitransparente */}
+              <Path path={passedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="rgba(0, 0, 0, 0.4)" />
+              
+              {/* Textura de ruido monocromática */}
+              <Group blendMode="softLight">
+                <ColorMatrix matrix={GRAYSCALE_MATRIX} />
+                <Path path={passedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="white">
+                  <FractalNoise freqX={0.05} freqY={0.05} octaves={3} />
+                </Path>
+              </Group>
+            </Group>
+
             {/* Layer 3: Live Preview (Task or Reminder) */}
             <Group opacity={previewTaskOpacity}>
               <Path path={animatedLivePath} style="stroke" strokeWidth={69} strokeCap="butt" color={liveColor} />
@@ -917,6 +959,21 @@ export default function App() {
                 </React.Fragment>
               );
             })}
+
+            {/* Layer 6: Aguja de la Hora Actual */}
+            <Group>
+              <Line 
+                p1={vec(175 + 68.5 * Math.cos(currentRad), 175 + 68.5 * Math.sin(currentRad))}
+                p2={vec(175 + 142.5 * Math.cos(currentRad), 175 + 142.5 * Math.sin(currentRad))}
+                color="white"
+                strokeWidth={3}
+              />
+              <Circle 
+                c={vec(175 + 142.5 * Math.cos(currentRad), 175 + 142.5 * Math.sin(currentRad))}
+                r={6}
+                color="white"
+              />
+            </Group>
 
           </Canvas>
 
@@ -1167,6 +1224,21 @@ export default function App() {
             </ScrollView>
           </View>
         )}
+      </View>
+
+      
+
+      {/* Bottom Menu Bar - 75px height */}
+      <View className="w-full h-[75px] bg-[#CDCDCD] flex-row justify-around items-center px-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <TouchableOpacity
+            key={`menu-btn-${i}`}
+            className="w-[44px] h-[44px] rounded-full bg-[#D9D9D9] items-center justify-center"
+            activeOpacity={0.7}
+          >
+            {/* Los iconos se conectarán en la siguiente fase */}
+          </TouchableOpacity>
+        ))}
       </View>
 
       
