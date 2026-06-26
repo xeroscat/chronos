@@ -1,0 +1,28 @@
+# Chronos AI - Cline Rules
+
+## 🚀 Tech Stack & Core Architecture
+- **Framework:** React Native + Expo (v51+) with Expo Router.
+- **Styling:** NativeWind v4 (Tailwind for React Native) - Always import `../global.css` or the correct path to global.css in root layouts.
+- **State Management:** Zustand (for ephemeral/UI state) and React Query (for server state).
+- **Database & Auth:** Supabase (PostgreSQL + Auth + Edge Functions).
+- **Local Storage (Expo Go):** `expo-secure-store` for secure persistent sessions (via `src/core/storage.ts`).
+- **Graphics Engine:** React Native Skia (`@shopify/react-native-skia`) and React Native Reanimated.
+
+## 🎯 Token Optimization & Agent Efficiency (Save Money/Tokens)
+1. **Incremental Edits Only:** Never rewrite an entire file if you can edit specific lines or functions. Provide clean, targeted code diffs.
+2. **Single Source of Truth for Types:** Do not define local duplicate interfaces. Always import core types (like `BlockItem`, `ReminderItem`, `PilarType`) from `src/types/index.ts`.
+3. **No Conversational Filler:** Keep explanations ultra-short, direct, and technical. Focus 100% on the code execution.
+4. **Minimize File Reading:** Do not run recursive grep/find commands on `node_modules` or non-source directories. Only read the specific file we are working on.
+
+## 📐 Core Math & UI Rules
+1. **The Slot System (M1):** 
+   - Time is represented in 288 slots per day (0 to 287). Each slot = 5 minutes.
+   - Start/End of the day (00:00 / Slot 0) is at the **bottom** of the circle (6 o'clock position).
+   - Rotation is clockwise.
+   - Mathematics: `startAngle = 90 + (slotInicio * 1.25)` and `sweepAngle = duracionSlots * 1.25`.
+   - Gráfica Center: `(175, 175)` inside a `350x350` canvas bounding box to avoid clipping (Canvas Bleed).
+2. **No Drag and Drop:** All blocks are added via form UI buttons. Timeline interactions are purely tap/click-based.
+3. **State Separation:**
+   - Server data (Tasks, Projects, TimeBlocks) -> React Query.
+   - UI temporary states (modals open, active task selected) -> Zustand.
+   - Local settings (theme, tokens) -> SecureStore.
