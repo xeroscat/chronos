@@ -43,6 +43,9 @@ export default function App() {
     openFormForNewTask,
     openFormForEdit,
     deleteEvent,
+    fetchData,
+    isLoading,
+    clearData,
   } = useTimelineStore();
 
   // Real-time clock state
@@ -73,6 +76,14 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (session) {
+      fetchData();
+    } else {
+      clearData();
+    }
+  }, [session, fetchData, clearData]);
+
   if (isAuthLoading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
@@ -86,9 +97,19 @@ export default function App() {
     return <AuthScreen />;
   }
 
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center">
+        <ActivityIndicator size="large" color="#000000" />
+        <Text className="text-xs font-semibold text-slate-400 mt-4">Cargando tu día inteligente...</Text>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <StatusBar style="light" />
+    <Animated.View entering={FadeIn.duration(600)} className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-white">
+        <StatusBar style="light" />
 
       {/* Header Block */}
       <View className="w-full h-[55px] bg-white flex-row justify-between items-center px-[26px]">
@@ -181,9 +202,12 @@ export default function App() {
                       const endTime = endSlot * 5 * 60;
                       const currentTime = (nowDate.getHours() * 3600) + (nowDate.getMinutes() * 60) + nowDate.getSeconds();
                       const remainingSeconds = endTime - currentTime;
-                      const minutes = Math.floor(remainingSeconds / 60);
+                      const hours = Math.floor(remainingSeconds / 3600);
+                      const minutes = Math.floor((remainingSeconds % 3600) / 60);
                       const seconds = remainingSeconds % 60;
-                      countdown = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                      countdown = hours > 0 
+                        ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}` 
+                        : `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                     }
 
                     let timeRange = '';
@@ -293,8 +317,9 @@ export default function App() {
         </TouchableOpacity>
       )}
 
-      {/* Task Form Component */}
-      <TaskForm />
-    </SafeAreaView>
+        {/* Task Form Component */}
+        <TaskForm />
+      </SafeAreaView>
+    </Animated.View>
   );
 }

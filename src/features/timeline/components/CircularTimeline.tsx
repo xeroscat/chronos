@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { Canvas, Circle, Path, Skia, vec, Line, Group, FractalNoise, ColorMatrix } from '@shopify/react-native-skia';
 import Animated, {
@@ -41,6 +41,32 @@ interface CircularTimelineProps {
 }
 
 export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, currentSlot }) => {
+  // --- Estado local para montaje escalonado (Staggered Mount) ---
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // --- Animación de Fade-In al montarse la gráfica ---
+  const timelineOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (isReady) {
+      timelineOpacity.value = withTiming(1, { duration: 500 });
+      bgBlocksOpacity.value = withTiming(isFormOpen ? 0.25 : 1, { duration: 500 });
+    }
+  }, [isReady]);
+
+  const animatedTimelineStyle = useAnimatedStyle(() => {
+    return {
+      opacity: timelineOpacity.value,
+    };
+  });
+
   // --- Consumir estado global de Zustand ---
   const {
     blocks,
@@ -61,7 +87,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   const animatedSweepAngle = useSharedValue(0);
   const animatedReminderRad = useSharedValue(0);
   
-  const bgBlocksOpacity = useSharedValue(1);
+  const bgBlocksOpacity = useSharedValue(0);
   const previewTaskOpacity = useSharedValue(0);
   const previewReminderOpacity = useSharedValue(0);
 
@@ -101,6 +127,8 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   }, [targetStartAngle, targetSweepAngle, targetReminderRad]);
 
   useEffect(() => {
+    if (!isReady) return;
+
     if (isFormOpen) {
       bgBlocksOpacity.value = withTiming(0.25, { duration: 300 });
       if (activeTab === 'tareas') {
@@ -117,7 +145,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
       previewTaskOpacity.value = withTiming(0, { duration: 200 });
       previewReminderOpacity.value = withTiming(0, { duration: 200 });
     }
-  }, [isFormOpen, activeTab, targetSweepAngle]);
+  }, [isReady, isFormOpen, activeTab, targetSweepAngle]);
 
   // --- Derivar Paths y Vectores en el UI Thread ---
   const animatedLivePath = useDerivedValue(() => {
@@ -156,11 +184,19 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
     };
   });
 
+  if (!isReady) {
+    return <View className="w-[275px] h-[275px] rounded-full bg-slate-100" />;
+  }
+
   return (
-    <View className="w-[275px] h-[275px] items-center justify-center relative">
+    <Animated.View 
+      style={animatedTimelineStyle}
+      className="w-[275px] h-[275px] items-center justify-center relative"
+    >
       <Canvas style={{ width: 350, height: 350, position: 'absolute', left: -37.5, top: -37.5 }}>
-        {/* Layer 1: Base Circle */}
-        <Circle c={vec(cx, cy)} r={137.5} color="#D9D9D9" />
+        <Group opacity={timelineOpacity}>
+          {/* Layer 1: Base Circle */}
+          <Circle c={vec(cx, cy)} r={137.5} color="#D9D9D9" />
         
         {/* Layer 2: Saved Task Blocks */}
         <Group opacity={bgBlocksOpacity}>
@@ -248,19 +284,20 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
           );
         })}
 
-        {/* Layer 6: Current Time needle */}
-        <Group>
-          <Line 
-            p1={vec(cx + 68.5 * Math.cos(currentRad), cy + 68.5 * Math.sin(currentRad))}
-            p2={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
-            color="white"
-            strokeWidth={3}
-          />
-          <Circle 
-            c={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
-            r={6}
-            color="white"
-          />
+          {/* Layer 6: Current Time needle */}
+          <Group>
+            <Line 
+              p1={vec(cx + 68.5 * Math.cos(currentRad), cy + 68.5 * Math.sin(currentRad))}
+              p2={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
+              color="white"
+              strokeWidth={3}
+            />
+            <Circle 
+              c={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
+              r={6}
+              color="white"
+            />
+          </Group>
         </Group>
       </Canvas>
 
@@ -308,6 +345,6 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
           {pickerHour}:{pickerMinute}
         </Animated.Text>
       </View>
-    </View>
+    </Animated.View>
   );
 };
