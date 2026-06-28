@@ -1,7 +1,14 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PilarType } from '../types';
 import { supabase } from '../core/supabase';
 import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace, checkCollision } from '../features/timeline/transformers/timeMath';
+
+
+
+
+
 
 export interface BlockItem {
   blockId: string;
@@ -95,7 +102,9 @@ interface TimelineState {
   clearData: () => void;
 }
 
-export const useTimelineStore = create<TimelineState>((set, get) => ({
+export const useTimelineStore = create<TimelineState>()(
+  persist(
+    (set, get) => ({
   blocks: [],
   reminders: [],
   isLoading: false,
@@ -532,4 +541,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     isEditMode: false, 
     isFormOpen: false 
   })
-}));
+    }),
+    {
+      name: 'chronos-timeline-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ blocks: state.blocks, reminders: state.reminders }),
+    }
+  )
+);

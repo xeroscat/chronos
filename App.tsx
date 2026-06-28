@@ -93,23 +93,22 @@ export default function App() {
     );
   }
 
-  if (!session) {
-    return <AuthScreen />;
-  }
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#000000" />
-        <Text className="text-xs font-semibold text-slate-400 mt-4">Cargando tu día inteligente...</Text>
-      </View>
-    );
-  }
-
   return (
-    <Animated.View entering={FadeIn.duration(600)} className="flex-1 bg-white">
-      <SafeAreaView className="flex-1 bg-white">
-        <StatusBar style="light" />
+    <View className="flex-1 bg-white">
+      {!session ? (
+        <Animated.View key="auth" exiting={FadeOut.duration(400)} className="flex-1">
+          <AuthScreen />
+        </Animated.View>
+      ) : (
+        <Animated.View key="app" entering={FadeIn.duration(500)} className="flex-1">
+          {isLoading ? (
+            <View className="flex-1 bg-white items-center justify-center">
+              <ActivityIndicator size="large" color="#000000" />
+              <Text className="text-xs font-semibold text-slate-400 mt-4">Cargando tu día inteligente...</Text>
+            </View>
+          ) : (
+            <SafeAreaView className="flex-1 bg-white">
+              <StatusBar style="light" />
 
       {/* Header Block */}
       <View className="w-full h-[55px] bg-white flex-row justify-between items-center px-[26px]">
@@ -320,6 +319,9 @@ export default function App() {
         {/* Task Form Component */}
         <TaskForm />
       </SafeAreaView>
-    </Animated.View>
+          )}
+        </Animated.View>
+      )}
+    </View>
   );
 }
