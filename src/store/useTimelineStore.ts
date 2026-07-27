@@ -3,6 +3,7 @@ import { PilarType, Tasks, Reminder } from '../types';
 import { slotToTimeParts, findFirstFreeSpace } from '../features/timeline/transformers/timeMath';
 import { useUIStore } from './useUIStore';
 import { useTaskStore } from './taskStore';
+import { getFilteredBlocks as getFilteredBlocksSelector } from '../features/timeline/selectors';
 
 // Tipo para bloques de renderizado (solo datos necesarios)
 export type RenderBlock = {
@@ -132,48 +133,7 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
   // --- FILTRADO DE DATOS PARA RENDERIZADO ---
   getFilteredBlocks: () => {
     const { tasks, selectedDate } = useTaskStore.getState();
-    const { checkAndCalculateOverflow } = require('../features/timeline/transformers/timeMath');
-
-    const renderBlocks: RenderBlock[] = [];
-
-    tasks.forEach((task) => {
-      // Calcular overflow dinámicamente basado en past12
-      const overflowResult = task.past12
-        ? checkAndCalculateOverflow(task.slotInicio, task.duracionSlots, task.date)
-        : { past12: false, overflowDate: undefined, overflowSlots: undefined };
-
-      // Caso 1: Tarea principal coincide con la fecha seleccionada
-      if (task.date === selectedDate) {
-        renderBlocks.push({
-          id: task.id,
-          blockId: task.blockId,
-          slotInicio: task.slotInicio,
-          duracionSlots: task.duracionSlots,
-          slotFin: task.slotFin,
-          pilarTipo: task.pilarTipo,
-          status: task.status,
-          past12: task.past12,
-          isOverflow: false,
-        });
-      }
-      // Caso 2: Tarea con overflow que coincide con la fecha seleccionada (día siguiente)
-      else if (overflowResult.overflowDate === selectedDate && task.past12) {
-        renderBlocks.push({
-          id: task.id,
-          blockId: task.blockId,
-          slotInicio: 0, // Overflow siempre empieza en 00:00
-          duracionSlots: overflowResult.overflowSlots || 0,
-          slotFin: overflowResult.overflowSlots || 0,
-          pilarTipo: task.pilarTipo,
-          status: task.status,
-          past12: task.past12,
-          isOverflow: true,
-          overflowSlots: overflowResult.overflowSlots,
-        });
-      }
-    });
-
-    return renderBlocks;
+    return getFilteredBlocksSelector(tasks, selectedDate);
   },
 
   getFilteredReminders: () => {

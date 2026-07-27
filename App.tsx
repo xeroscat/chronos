@@ -19,8 +19,10 @@ import { CircularTimeline } from './src/features/timeline/components/CircularTim
 import { TaskForm } from './src/features/tasks/components/TaskForm';
 import { Tasks, Reminder } from './src/types';
 import { slotToTimeParts } from './src/features/timeline/transformers/timeMath';
+import { getFilteredTasksWithAdjustedValues, getFilteredReminders } from './src/features/tasks/selectors';
 
-type UnifiedEvent = (Tasks & { type: 'task'; sortSlot: number }) | (Reminder & { type: 'reminder'; sortSlot: number });
+type AdjustedTask = Tasks & { effectiveSlotInicio: number; effectiveDuracionSlots: number; isOverflow: boolean | null };
+type UnifiedEvent = (AdjustedTask & { type: 'task'; sortSlot: number }) | (Reminder & { type: 'reminder'; sortSlot: number });
 
 const PILLAR_COLORS: Record<PilarType, string> = { cuerpo: '#FF5733', mente: '#33A1FF', productividad: '#FFC300', personal: '#34C759' };
 
@@ -37,8 +39,6 @@ export default function App() {
 
   // Store actions and states
   const {
-    reminders,
-    getFilteredReminders,
     openFormForNewTask,
     openFormForEdit,
   } = useTimelineStore();
@@ -58,6 +58,8 @@ export default function App() {
     deleteEvent,
     getFilteredTasks,
     selectedDate,
+    tasks,
+    reminders,
   } = useTaskStore();
 
   // Real-time clock state
@@ -181,18 +183,18 @@ export default function App() {
 
             <ScrollView className="flex-1 w-full" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
               {(() => {
-                const filteredTasks = getFilteredTasks();
-                const filteredReminders = getFilteredReminders();
+                const filteredTasks = getFilteredTasksWithAdjustedValues(tasks, selectedDate);
+                const filteredReminders = getFilteredReminders(reminders, selectedDate);
                 const unifiedEvents: UnifiedEvent[] = [
-                  ...filteredTasks.map(t => ({ ...t, type: 'task' as const, sortSlot: t.slotInicio })),
+                  ...filteredTasks.map(t => ({ ...t, type: 'task' as const, sortSlot: t.effectiveSlotInicio })),
                   ...filteredReminders.map(r => ({ ...r, type: 'reminder' as const, sortSlot: r.slot }))
                 ];
 
                 const sortedEvents = unifiedEvents.sort((a, b) => {
-                  const aIsActive = a.type === 'task' && currentSlot >= a.slotInicio && currentSlot < (a.slotInicio + a.duracionSlots);
-                  const bIsActive = b.type === 'task' && currentSlot >= b.slotInicio && currentSlot < (b.slotInicio + b.duracionSlots);
-                  const aIsPast = a.type === 'task' ? (a.slotInicio + a.duracionSlots <= currentSlot) : (a.sortSlot <= currentSlot);
-                  const bIsPast = b.type === 'task' ? (b.slotInicio + b.duracionSlots <= currentSlot) : (b.sortSlot <= currentSlot);
+                  const aIsActive = a.type === 'task' && currentSlot >= a.effectiveSlotInicio && currentSlot < (a.effectiveSlotInicio + a.effectiveDuracionSlots);
+                  const bIsActive = b.type === 'task' && currentSlot >= b.effectiveSlotInicio && currentSlot < (b.effectiveSlotInicio + b.effectiveDuracionSlots);
+                  const aIsPast = a.type === 'task' ? (a.effectiveSlotInicio + a.effectiveDuracionSlots <= currentSlot) : (a.sortSlot <= currentSlot);
+                  const bIsPast = b.type === 'task' ? (b.effectiveSlotInicio + b.effectiveDuracionSlots <= currentSlot) : (b.sortSlot <= currentSlot);
 
                   if (aIsActive && !bIsActive) return -1;
                   if (!aIsActive && bIsActive) return 1;
@@ -204,11 +206,8 @@ export default function App() {
                 return sortedEvents.map((event) => {
                   if (event.type === 'task') {
                     const block = event;
-                    const isOverflow = block.overflowDate === selectedDate;
-                    
-                    // Para overflow, el slotInicio es 0 y duracionSlots es overflowSlots
-                    const effectiveSlotInicio = isOverflow ? 0 : block.slotInicio;
-                    const effectiveDuracionSlots = isOverflow ? (block.overflowSlots || 0) : block.duracionSlots;
+                    const effectiveSlotInicio = block.effectiveSlotInicio;
+                    const effectiveDuracionSlots = block.effectiveDuracionSlots;
                     
                     const isActive = currentSlot >= effectiveSlotInicio && currentSlot < (effectiveSlotInicio + effectiveDuracionSlots);
                     

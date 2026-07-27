@@ -6,6 +6,7 @@ import { supabase } from '../core/supabase';
 import { localSyncGate } from '../core/localSyncGate';
 import { PilarType } from '../types';
 import { checkAndCalculateOverflow } from '../features/timeline/transformers/timeMath';
+import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
 
 const LOCAL_STORAGE_KEY = 'chronos-task-storage';
 
@@ -107,7 +108,7 @@ export const useTaskStore = create<TaskState>()(
 
         let newTasks = [...tasks];
         if (editingEventId) {
-          newTasks = newTasks.map(t => ((t.id || t.blockId) === editingEventId ? taskWithOverflow : t));
+          newTasks = newTasks.map(t => ((t.id || t.blockId) === editingEventId ? optimisticTask : t));
         } else {
           newTasks.push(taskWithOverflow);
         }
@@ -183,12 +184,12 @@ export const useTaskStore = create<TaskState>()(
       // --- FILTRADO POR FECHA (incluye overflow) ---
       getFilteredTasks: () => {
         const { tasks, selectedDate } = get();
-        return tasks.filter(task => task.date === selectedDate || task.overflowDate === selectedDate);
+        return getFilteredTasksSelector(tasks, selectedDate);
       },
 
       getFilteredReminders: () => {
         const { reminders, selectedDate } = get();
-        return reminders.filter(reminder => reminder.date === selectedDate);
+        return getFilteredRemindersSelector(reminders, selectedDate);
       },
     }),
     {
