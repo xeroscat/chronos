@@ -9,7 +9,8 @@ import Animated, {
   useDerivedValue,
 } from 'react-native-reanimated';
 import { useTimelineStore } from '../../../store/useTimelineStore';
-import { timeToSlot, durationToSlots, checkCollision } from '../transformers/timeMath';
+import { useUIStore } from '../../../store/useUIStore';
+import { timeToSlot, durationToSlots, checkCollision, slotToTimeParts } from '../transformers/timeMath';
 
 // Constantes visuales
 const PILLAR_COLORS = {
@@ -71,16 +72,21 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   const {
     blocks,
     reminders,
-    isFormOpen,
-    activeTab,
+    getFilteredBlocks,
+    getFilteredReminders,
     selectedPilar,
-    editingEventId,
     pickerHour,
     pickerMinute,
     pickerAmPm,
     pickerDurationHour,
     pickerDurationMin,
   } = useTimelineStore();
+
+  const {
+    isFormOpen,
+    activeTab,
+    editingEventId,
+  } = useUIStore();
 
   // --- Valores animados para Reanimated ---
   const animatedStartAngle = useSharedValue(0);
@@ -100,7 +106,8 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   const targetReminderRad = ((90 + liveSlotInicio * 1.25) * Math.PI) / 180;
 
   // Lógica de colisión local para cambiar el color de la vista previa en tiempo real
-  const activeBlocksForCollision = blocks.filter(b => b.blockId !== editingEventId);
+  const filteredBlocks = getFilteredBlocks();
+  const activeBlocksForCollision = filteredBlocks.filter(b => (b.id || b.blockId) !== editingEventId);
   const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeBlocksForCollision);
   const liveColor = isColliding ? '#FF3B30' : PILLAR_COLORS[selectedPilar];
 
@@ -201,14 +208,19 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
         {/* Layer 2: Saved Task Blocks */}
         <Group opacity={bgBlocksOpacity}>
           {activeBlocksForCollision.map((block) => {
-            const startAngle = 90 + block.slotInicio * 1.25;
-            const sweepAngle = block.duracionSlots * 1.25;
+            // Lógica de overflow: usar isOverflow flag calculado en getFilteredBlocks
+            const isOverflow = block.isOverflow;
+            const renderSlotInicio = isOverflow ? 0 : block.slotInicio;
+            const renderDuracionSlots = isOverflow ? (block.overflowSlots || 0) : block.duracionSlots;
+
+            const startAngle = 90 + renderSlotInicio * 1.25;
+            const sweepAngle = renderDuracionSlots * 1.25;
             const path = createArcPath(cx, cy, 103, startAngle, sweepAngle);
             const baseColor = PILLAR_COLORS[block.pilarTipo];
-            
+
             return (
               <Path
-                key={block.blockId}
+                key={block.id ?? block.blockId}
                 path={path}
                 style="stroke"
                 strokeWidth={69}
@@ -326,13 +338,14 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
           const rad = ((90 + reminder.slot * 1.25) * Math.PI) / 180;
           const xText = cx + 162 * Math.cos(rad);
           const yText = cy + 162 * Math.sin(rad);
+          const timeParts = slotToTimeParts(reminder.slot);
           return (
-            <Text 
+            <Text
               key={`text-${reminder.id}`}
-              className="absolute text-[11px] font-bold text-slate-800 text-center w-[40px] h-[16px]" 
+              className="absolute text-[11px] font-bold text-slate-800 text-center w-[40px] h-[16px]"
               style={{ left: xText - 20, top: yText - 8 }}
             >
-              {reminder.timeLabel.split(' ')[0]}
+              {timeParts.h}:{timeParts.m}
             </Text>
           );
         })}

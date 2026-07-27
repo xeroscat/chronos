@@ -12,11 +12,15 @@ import Animated, {
 import { PilarType } from './src/types';
 import { supabase } from './src/core/supabase';
 import AuthScreen from './src/features/auth/components/AuthScreen';
-import { useTimelineStore, BlockItem, ReminderItem } from './src/store/useTimelineStore';
+import { useTimelineStore } from './src/store/useTimelineStore';
+import { useUIStore } from './src/store/useUIStore';
+import { useTaskStore } from './src/store/taskStore';
 import { CircularTimeline } from './src/features/timeline/components/CircularTimeline';
 import { TaskForm } from './src/features/tasks/components/TaskForm';
+import { Tasks, Reminder } from './src/types';
+import { slotToTimeParts } from './src/features/timeline/transformers/timeMath';
 
-type UnifiedEvent = (BlockItem & { type: 'task'; sortSlot: number }) | (ReminderItem & { type: 'reminder'; sortSlot: number });
+type UnifiedEvent = (Tasks & { type: 'task'; sortSlot: number }) | (Reminder & { type: 'reminder'; sortSlot: number });
 
 const PILLAR_COLORS: Record<PilarType, string> = { cuerpo: '#FF5733', mente: '#33A1FF', productividad: '#FFC300', personal: '#34C759' };
 
@@ -33,20 +37,28 @@ export default function App() {
 
   // Store actions and states
   const {
-    blocks,
     reminders,
+    getFilteredReminders,
+    openFormForNewTask,
+    openFormForEdit,
+  } = useTimelineStore();
+
+  const {
     isFormOpen,
     isEditMode,
     setEditMode,
     expandedBlockId,
     setExpandedBlockId,
-    openFormForNewTask,
-    openFormForEdit,
-    deleteEvent,
+  } = useUIStore();
+
+  const {
     fetchData,
     isLoading,
     clearData,
-  } = useTimelineStore();
+    deleteEvent,
+    getFilteredTasks,
+    selectedDate,
+  } = useTaskStore();
 
   // Real-time clock state
   const [currentSlot, setCurrentSlot] = useState(0);
@@ -77,12 +89,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (session) {
-      fetchData();
-    } else {
-      clearData();
-    }
-  }, [session, fetchData, clearData]);
+    // MODO OFFLINE: Cargar datos siempre, independientemente de sesión
+    fetchData();
+  }, [fetchData]);
 
   if (isAuthLoading) {
     return (
@@ -172,9 +181,11 @@ export default function App() {
 
             <ScrollView className="flex-1 w-full" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
               {(() => {
+                const filteredTasks = getFilteredTasks();
+                const filteredReminders = getFilteredReminders();
                 const unifiedEvents: UnifiedEvent[] = [
-                  ...blocks.map(b => ({ ...b, type: 'task' as const, sortSlot: b.slotInicio })),
-                  ...reminders.map(r => ({ ...r, type: 'reminder' as const, sortSlot: r.slot }))
+                  ...filteredTasks.map(t => ({ ...t, type: 'task' as const, sortSlot: t.slotInicio })),
+                  ...filteredReminders.map(r => ({ ...r, type: 'reminder' as const, sortSlot: r.slot }))
                 ];
 
                 const sortedEvents = unifiedEvents.sort((a, b) => {
@@ -193,11 +204,17 @@ export default function App() {
                 return sortedEvents.map((event) => {
                   if (event.type === 'task') {
                     const block = event;
-                    const isActive = currentSlot >= block.slotInicio && currentSlot < (block.slotInicio + block.duracionSlots);
+                    const isOverflow = block.overflowDate === selectedDate;
+                    
+                    // Para overflow, el slotInicio es 0 y duracionSlots es overflowSlots
+                    const effectiveSlotInicio = isOverflow ? 0 : block.slotInicio;
+                    const effectiveDuracionSlots = isOverflow ? (block.overflowSlots || 0) : block.duracionSlots;
+                    
+                    const isActive = currentSlot >= effectiveSlotInicio && currentSlot < (effectiveSlotInicio + effectiveDuracionSlots);
                     
                     let countdown = '';
                     if (isActive) {
-                      const endSlot = block.slotInicio + block.duracionSlots;
+                      const endSlot = effectiveSlotInicio + effectiveDuracionSlots;
                       const endTime = endSlot * 5 * 60;
                       const currentTime = (nowDate.getHours() * 3600) + (nowDate.getMinutes() * 60) + nowDate.getSeconds();
                       const remainingSeconds = endTime - currentTime;
@@ -211,27 +228,27 @@ export default function App() {
 
                     let timeRange = '';
                     if (!isActive) {
-                      const startHour = Math.floor((block.slotInicio * 5) / 60);
-                      const startMin = (block.slotInicio * 5) % 60;
-                      const endSlot = block.slotInicio + block.duracionSlots;
+                      const startHour = Math.floor((effectiveSlotInicio * 5) / 60);
+                      const startMin = (effectiveSlotInicio * 5) % 60;
+                      const endSlot = effectiveSlotInicio + effectiveDuracionSlots;
                       const endHour = Math.floor((endSlot * 5) / 60);
                       const endMin = (endSlot * 5) % 60;
                       timeRange = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')} - ${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
                     }
 
-                    const aEnd = block.slotInicio + block.duracionSlots;
+                    const aEnd = effectiveSlotInicio + effectiveDuracionSlots;
                     const isPast = aEnd <= currentSlot;
 
                     return (
                       <Animated.View
-                        key={block.blockId}
+                        key={block.id}
                         layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)}
                         className={`w-full rounded-[28px] mb-3 overflow-hidden ${!isActive && isPast ? 'opacity-40' : (!isActive ? 'opacity-80' : '')}`}
                         style={{ backgroundColor: PILLAR_COLORS[block.pilarTipo] }}
                       >
                         <TouchableOpacity
                           activeOpacity={0.7}
-                          onPress={() => isEditMode ? openFormForEdit({ ...block, type: 'task' }) : setExpandedBlockId(expandedBlockId === block.blockId ? null : block.blockId)}
+                          onPress={() => isEditMode ? openFormForEdit({ ...block, type: 'task' }) : setExpandedBlockId(expandedBlockId === block.id ? null : block.id)}
                           className="w-full min-h-[52px] flex-row items-center justify-between px-4 py-3"
                         >
                           <Text className="text-sm font-bold text-white" numberOfLines={1} ellipsizeMode="tail">
@@ -248,7 +265,10 @@ export default function App() {
                             )}
                             {isEditMode && (
                               <TouchableOpacity
-                                onPress={() => deleteEvent(block.blockId, 'task')}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  deleteEvent(block.id, 'task');
+                                }}
                                 className="w-[28px] h-[28px] bg-red-500 rounded-full items-center justify-center ml-2 border-2 border-white"
                               >
                                 <Text className="text-white font-bold text-xs">✕</Text>
@@ -256,7 +276,7 @@ export default function App() {
                             )}
                           </View>
                         </TouchableOpacity>
-                        {expandedBlockId === block.blockId && (
+                        {expandedBlockId === block.id && (
                           <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} className="px-4 pb-4 pt-1 border-t border-white/20">
                             <Text className="text-white/90 text-[13px] leading-5 mb-3">{block.description || 'Sin descripción detallada.'}</Text>
                             <View className="w-full bg-black/15 rounded-lg p-3 flex-row items-center justify-between">
@@ -270,6 +290,8 @@ export default function App() {
                   } else {
                     const reminder = event;
                     const isPast = currentSlot > reminder.slot;
+                    const timeParts = slotToTimeParts(reminder.slot);
+                    const timeLabel = `${timeParts.h}:${timeParts.m} ${timeParts.ampm}`;
                     return (
                       <TouchableOpacity
                         key={reminder.id}
@@ -279,10 +301,13 @@ export default function App() {
                       >
                         <Text className="text-sm font-bold text-white">{reminder.descripcion || 'Recordatorio'}</Text>
                         <View className="flex-row items-center">
-                          <Text className="text-xs font-semibold text-white">{reminder.timeLabel.split(' ')[0]}</Text>
+                          <Text className="text-xs font-semibold text-white">{timeLabel.split(' ')[0]}</Text>
                           {isEditMode && (
                             <TouchableOpacity
-                              onPress={() => deleteEvent(reminder.id, 'reminder')}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                deleteEvent(reminder.id, 'reminder');
+                              }}
                               className="w-[28px] h-[28px] bg-red-500 rounded-full items-center justify-center ml-2 border-2 border-white"
                             >
                               <Text className="text-white font-bold text-xs">✕</Text>

@@ -1,45 +1,28 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PilarType } from '../types';
-import { supabase } from '../core/supabase';
-import { timeToSlot, durationToSlots, slotToTimeParts, findFirstFreeSpace, checkCollision } from '../features/timeline/transformers/timeMath';
+import { PilarType, Tasks, Reminder } from '../types';
+import { slotToTimeParts, findFirstFreeSpace } from '../features/timeline/transformers/timeMath';
+import { useUIStore } from './useUIStore';
+import { useTaskStore } from './taskStore';
 
-
-
-
-
-
-export interface BlockItem {
+// Tipo para bloques de renderizado (solo datos necesarios)
+export type RenderBlock = {
+  id: string;
   blockId: string;
   slotInicio: number;
   duracionSlots: number;
+  slotFin?: number;
   pilarTipo: PilarType;
-  title: string;
-  description: string;
-  reminderBefore?: string;
-}
+  status: string | null;
+  past12: boolean | null;
+  isOverflow?: boolean; // Flag para identificar si este bloque es renderizado como overflow
+  overflowSlots?: number; // Solo si isOverflow es true
+};
 
-export interface ReminderItem {
-  id: string;
-  slot: number;
-  descripcion: string;
-  pilarTipo: PilarType;
-  timeLabel: string;
-}
+export type TimelineEvent =
+  | ({ type: 'task' } & Tasks)
+  | ({ type: 'reminder' } & Reminder);
 
 interface TimelineState {
-  blocks: BlockItem[];
-  reminders: ReminderItem[];
-  isLoading: boolean;
-  
-  // UI States
-  isFormOpen: boolean;
-  activeTab: 'tareas' | 'recordatorios';
-  isEditMode: boolean;
-  expandedBlockId: string | null;
-  editingEventId: string | null;
-  
   // Form States (Tasks)
   taskTitle: string;
   selectedPilar: PilarType;
@@ -67,10 +50,6 @@ interface TimelineState {
   pickerDurationMin: string;
 
   // Actions
-  setFormOpen: (open: boolean) => void;
-  setActiveTab: (tab: 'tareas' | 'recordatorios') => void;
-  setEditMode: (editMode: boolean) => void;
-  setExpandedBlockId: (id: string | null) => void;
   setPilarSelectorOpen: (open: boolean) => void;
   setSelectedPilar: (pilar: PilarType) => void;
   setTaskTitle: (title: string) => void;
@@ -92,28 +71,18 @@ interface TimelineState {
   setReminderTime: (time: string) => void;
   setReminderBefore: (alert: string) => void;
 
-  // Supabase CRUD Operations
-  fetchData: (silent?: boolean) => Promise<void>;
+  // Form Actions
   openFormForNewTask: () => void;
-  openFormForEdit: (event: any) => void;
-  saveTask: () => Promise<boolean>; // Devuelve false si hay colisión o error
-  saveReminder: () => Promise<void>;
-  deleteEvent: (id: string, type: 'task' | 'reminder') => Promise<void>;
-  clearData: () => void;
+  openFormForEdit: (event: TimelineEvent) => void;
+
+  // Data filtering
+  blocks: RenderBlock[];
+  reminders: Reminder[];
+  getFilteredBlocks: () => RenderBlock[];
+  getFilteredReminders: () => Reminder[];
 }
 
-export const useTimelineStore = create<TimelineState>()(
-  persist(
-    (set, get) => ({
-  blocks: [],
-  reminders: [],
-  isLoading: false,
-  isFormOpen: false,
-  activeTab: 'tareas',
-  isEditMode: false,
-  expandedBlockId: null,
-  editingEventId: null,
-  
+export const useTimelineStore = create<TimelineState>()((set, get) => ({
   taskTitle: 'Nueva Tarea',
   selectedPilar: 'productividad',
   isPilarSelectorOpen: false,
@@ -124,22 +93,21 @@ export const useTimelineStore = create<TimelineState>()(
   
   reminderTime: '15:15',
   reminderDesc: '',
-  
+
   isEditingDesc: false,
   isEditingTime: false,
   isEditingDuration: false,
   isEditingAlert: false,
-  
+
   pickerHour: '08',
   pickerMinute: '30',
   pickerAmPm: 'AM',
   pickerDurationHour: '1h',
   pickerDurationMin: '30m',
 
-  setFormOpen: (open) => set({ isFormOpen: open }),
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  setEditMode: (editMode) => set({ isEditMode: editMode }),
-  setExpandedBlockId: (id) => set({ expandedBlockId: id }),
+  blocks: [],
+  reminders: [],
+
   setPilarSelectorOpen: (open) => set({ isPilarSelectorOpen: open }),
   setSelectedPilar: (pilar) => set({ selectedPilar: pilar }),
   setTaskTitle: (title) => set({ taskTitle: title }),
@@ -161,73 +129,65 @@ export const useTimelineStore = create<TimelineState>()(
   setReminderTime: (time) => set({ reminderTime: time }),
   setReminderBefore: (alert) => set({ reminderBefore: alert }),
 
-  // --- OBTENER DATOS (READ con JOIN Relacional) ---
-  fetchData: async (silent = false) => {
-    if (!silent) set({ isLoading: true });
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  // --- FILTRADO DE DATOS PARA RENDERIZADO ---
+  getFilteredBlocks: () => {
+    const { tasks, selectedDate } = useTaskStore.getState();
+    const { checkAndCalculateOverflow } = require('../features/timeline/transformers/timeMath');
 
-      // 1. Obtener bloques de tiempo enlazados a tareas y pilares
-      const { data: rawBlocks, error: blocksError } = await supabase
-        .from('time_blocks')
-        .select(`
-          id,
-          slot_inicio,
-          duracion_slots,
-          pillars (tipo),
-          tasks (id, title, description, reminder_before)
-        `)
-        .eq('user_id', user.id);
+    const renderBlocks: RenderBlock[] = [];
 
-      if (blocksError) throw blocksError;
+    tasks.forEach((task) => {
+      // Calcular overflow dinámicamente basado en past12
+      const overflowResult = task.past12
+        ? checkAndCalculateOverflow(task.slotInicio, task.duracionSlots, task.date)
+        : { past12: false, overflowDate: undefined, overflowSlots: undefined };
 
-      const mappedBlocks: BlockItem[] = (rawBlocks || []).map((item: any) => ({
-        blockId: item.id,
-        slotInicio: item.slot_inicio,
-        duracionSlots: item.duracion_slots,
-        pilarTipo: item.pillars?.tipo as PilarType,
-        title: item.tasks?.title || 'Sin Título',
-        description: item.tasks?.description || '',
-        reminderBefore: item.tasks?.reminder_before || '5m antes',
-      }));
+      // Caso 1: Tarea principal coincide con la fecha seleccionada
+      if (task.date === selectedDate) {
+        renderBlocks.push({
+          id: task.id,
+          blockId: task.blockId,
+          slotInicio: task.slotInicio,
+          duracionSlots: task.duracionSlots,
+          slotFin: task.slotFin,
+          pilarTipo: task.pilarTipo,
+          status: task.status,
+          past12: task.past12,
+          isOverflow: false,
+        });
+      }
+      // Caso 2: Tarea con overflow que coincide con la fecha seleccionada (día siguiente)
+      else if (overflowResult.overflowDate === selectedDate && task.past12) {
+        renderBlocks.push({
+          id: task.id,
+          blockId: task.blockId,
+          slotInicio: 0, // Overflow siempre empieza en 00:00
+          duracionSlots: overflowResult.overflowSlots || 0,
+          slotFin: overflowResult.overflowSlots || 0,
+          pilarTipo: task.pilarTipo,
+          status: task.status,
+          past12: task.past12,
+          isOverflow: true,
+          overflowSlots: overflowResult.overflowSlots,
+        });
+      }
+    });
 
-      // 2. Obtener Recordatorios Estáticos
-      const { data: rawReminders, error: remindersError } = await supabase
-        .from('static_reminders')
-        .select(`
-          id,
-          slot,
-          description,
-          time_label,
-          pillars (tipo)
-        `)
-        .eq('user_id', user.id);
-
-      if (remindersError) throw remindersError;
-
-      const mappedReminders: ReminderItem[] = (rawReminders || []).map((item: any) => ({
-        id: item.id,
-        slot: item.slot,
-        descripcion: item.description,
-        pilarTipo: item.pillars?.tipo as PilarType,
-        timeLabel: item.time_label,
-      }));
-
-      set({ blocks: mappedBlocks, reminders: mappedReminders });
-    } catch (error) {
-      console.error(' [CHRONOS DB] Error al obtener datos:', error);
-    } finally {
-      if (!silent) set({ isLoading: false });
-    }
+    return renderBlocks;
   },
 
+  getFilteredReminders: () => {
+    const { reminders, selectedDate } = useTaskStore.getState();
+    return reminders.filter((reminder) => reminder.date === selectedDate);
+  },
+
+
   openFormForNewTask: () => {
-    const { blocks } = get();
+    const { tasks } = useTaskStore.getState();
     const defaultDurationSlots = 12;
-    const freeSlot = findFirstFreeSpace(blocks, defaultDurationSlots, 96);
+    const freeSlot = findFirstFreeSpace(tasks, defaultDurationSlots, 96);
     const timeParts = slotToTimeParts(freeSlot);
-    
+
     set({
       pickerHour: timeParts.h,
       pickerMinute: timeParts.m,
@@ -236,20 +196,29 @@ export const useTimelineStore = create<TimelineState>()(
       pickerDurationHour: '1h',
       pickerDurationMin: '00m',
       duration: '1h 00m',
-      editingEventId: null,
       taskTitle: 'Nueva Tarea',
       description: '',
-      isFormOpen: true,
     });
+
+    // UI state is now in useUIStore
+    useUIStore.getState().setEditingEventId(null);
+    useUIStore.getState().setFormOpen(true);
   },
 
   openFormForEdit: (event) => {
+    // UI state is now in useUIStore
+    // This function only sets form data
     set({
-      editingEventId: event.type === 'task' ? event.blockId : event.id,
-      activeTab: event.type === 'task' ? 'tareas' : 'recordatorios',
       selectedPilar: event.pilarTipo,
-      isEditMode: false,
     });
+
+    const editingEventId = event.type === 'task' ? (event.id || event.blockId) : event.id;
+    const activeTab = event.type === 'task' ? 'tareas' : 'recordatorios';
+
+    // Set UI state in useUIStore
+    useUIStore.getState().setEditingEventId(editingEventId);
+    useUIStore.getState().setActiveTab(activeTab);
+    useUIStore.getState().setFormOpen(true);
 
     if (event.type === 'task') {
       const timeParts = slotToTimeParts(event.slotInicio);
@@ -278,274 +247,8 @@ export const useTimelineStore = create<TimelineState>()(
         reminderTime: `${timeParts.h}:${timeParts.m} ${timeParts.ampm}`,
       });
     }
-    set({ isFormOpen: true });
   },
 
-  // --- GUARDAR TAREA (CREATE & UPDATE transaccional) ---
-  saveTask: async () => {
-    const { pickerHour, pickerMinute, pickerAmPm, pickerDurationHour, pickerDurationMin, selectedPilar, taskTitle, description, reminderBefore, editingEventId, blocks } = get();
-    
-    const liveSlotInicio = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
-    const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
-    
-    const activeBlocksForCollision = blocks.filter(b => b.blockId !== editingEventId);
-    const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeBlocksForCollision);
 
-    if (isColliding) return false;
 
-    // --- ACTUALIZACIÓN OPTIMISTA ---
-    const optimisticId = editingEventId || `temp-${Date.now()}`;
-    const optimisticBlock: BlockItem = {
-      blockId: optimisticId,
-      slotInicio: liveSlotInicio,
-      duracionSlots: liveDuracionSlots,
-      pilarTipo: selectedPilar,
-      title: taskTitle,
-      description: description,
-      reminderBefore: reminderBefore
-    };
-
-    let newBlocks = [...blocks];
-    if (editingEventId) {
-      newBlocks = newBlocks.map(b => b.blockId === editingEventId ? optimisticBlock : b);
-    } else {
-      newBlocks.push(optimisticBlock);
-    }
-
-    // Actualizar estado local e inmediatamente cerrar el modal
-    set({ blocks: newBlocks, isFormOpen: false, editingEventId: null });
-
-    // --- GUARDADO EN SEGUNDO PLANO ---
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // 1. Obtener el id del pilar correspondiente para este usuario
-        const { data: pillarData, error: pillarError } = await supabase
-          .from('pillars')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('tipo', selectedPilar)
-          .single();
-
-        if (pillarError) throw pillarError;
-        const pilarId = pillarData.id;
-
-        if (editingEventId) {
-          // --- MODO EDICIÓN ---
-          // Obtener el block de tiempo actual para saber cuál es su task_id
-          const { data: currentBlock, error: cbError } = await supabase
-            .from('time_blocks')
-            .select('task_id')
-            .eq('id', editingEventId)
-            .single();
-
-          if (cbError) throw cbError;
-
-          // Actualizar la metadata en public.tasks
-          if (currentBlock.task_id) {
-            const { error: tError } = await supabase
-              .from('tasks')
-              .update({
-                title: taskTitle,
-                description: description,
-                pilar_id: pilarId,
-                reminder_before: reminderBefore
-              })
-              .eq('id', currentBlock.task_id);
-            if (tError) throw tError;
-          }
-
-          // Actualizar la geometría en public.time_blocks
-          const { error: tbError } = await supabase
-            .from('time_blocks')
-            .update({
-              slot_inicio: liveSlotInicio,
-              duracion_slots: liveDuracionSlots,
-              pilar_id: pilarId
-            })
-            .eq('id', editingEventId);
-          if (tbError) throw tbError;
-
-        } else {
-          // --- MODO REGISTRO NUEVO ---
-          // Insertar en public.tasks para obtener el id
-          const { data: newTask, error: tError } = await supabase
-            .from('tasks')
-            .insert({
-              user_id: user.id,
-              pilar_id: pilarId,
-              title: taskTitle,
-              description: description,
-              reminder_before: reminderBefore
-            })
-            .select('id')
-            .single();
-
-          if (tError) throw tError;
-
-          // Insertar en public.time_blocks
-          const { error: tbError } = await supabase
-            .from('time_blocks')
-            .insert({
-              user_id: user.id,
-              task_id: newTask.id,
-              pilar_id: pilarId,
-              slot_inicio: liveSlotInicio,
-              duracion_slots: liveDuracionSlots
-            });
-
-          if (tbError) throw tbError;
-        }
-
-        // Volver a sincronizar el frontend de forma limpia
-        await get().fetchData(true);
-      } catch (error) {
-        console.error(' [CHRONOS DB] Error al guardar tarea en background:', error);
-        // Si falla el background, revertimos recargando desde DB
-        await get().fetchData(true);
-      }
-    })();
-
-    return true;
-  },
-
-  // --- GUARDAR RECORDATORIO (CREATE & UPDATE) ---
-  saveReminder: async () => {
-    const { pickerHour, pickerMinute, pickerAmPm, reminderDesc, selectedPilar, editingEventId, reminders } = get();
-    
-    const slotVal = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
-    const timeLabelVal = `${pickerHour}:${pickerMinute} ${pickerAmPm}`;
-
-    // --- ACTUALIZACIÓN OPTIMISTA ---
-    const optimisticId = editingEventId || `temp-rem-${Date.now()}`;
-    const optimisticReminder: ReminderItem = {
-      id: optimisticId,
-      slot: slotVal,
-      descripcion: reminderDesc,
-      pilarTipo: selectedPilar,
-      timeLabel: timeLabelVal
-    };
-
-    let newReminders = [...reminders];
-    if (editingEventId) {
-      newReminders = newReminders.map(r => r.id === editingEventId ? optimisticReminder : r);
-    } else {
-      newReminders.push(optimisticReminder);
-    }
-
-    set({ reminders: newReminders, isFormOpen: false, editingEventId: null });
-
-    // --- GUARDADO EN SEGUNDO PLANO ---
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: pillarData, error: pillarError } = await supabase
-          .from('pillars')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('tipo', selectedPilar)
-          .single();
-
-        if (pillarError) throw pillarError;
-
-        if (editingEventId) {
-          const { error } = await supabase
-            .from('static_reminders')
-            .update({
-              slot: slotVal,
-              description: reminderDesc,
-              pilar_id: pillarData.id,
-              time_label: timeLabelVal
-            })
-            .eq('id', editingEventId);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from('static_reminders')
-            .insert({
-              user_id: user.id,
-              pilar_id: pillarData.id,
-              slot: slotVal,
-              description: reminderDesc,
-              time_label: timeLabelVal
-            });
-          if (error) throw error;
-        }
-
-        await get().fetchData(true);
-      } catch (error) {
-        console.error('❌ [CHRONOS DB] Error al guardar recordatorio en background:', error);
-        await get().fetchData(true);
-      }
-    })();
-  },
-
-  // --- ELIMINAR (DELETE en cascada por FK) ---
-  deleteEvent: async (id, type) => {
-    const { blocks, reminders } = get();
-
-    // --- ACTUALIZACIÓN OPTIMISTA ---
-    if (type === 'task') {
-      set({ blocks: blocks.filter(b => b.blockId !== id) });
-    } else {
-      set({ reminders: reminders.filter(r => r.id !== id) });
-    }
-
-    // --- ELIMINACIÓN EN SEGUNDO PLANO ---
-    (async () => {
-      try {
-        if (type === 'task') {
-          // Obtenemos el block para saber cuál es su task_id
-          const { data: block, error: bError } = await supabase
-            .from('time_blocks')
-            .select('task_id')
-            .eq('id', id)
-            .single();
-
-          if (bError) throw bError;
-
-          // Borrar la tarea principal (por 'on delete cascade', se eliminará automáticamente el time_block)
-          if (block.task_id) {
-            const { error: tError } = await supabase
-              .from('tasks')
-              .delete()
-              .eq('id', block.task_id);
-            if (tError) throw tError;
-          }
-        } else {
-          const { error } = await supabase
-            .from('static_reminders')
-            .delete()
-            .eq('id', id);
-          if (error) throw error;
-        }
-
-        // Refrescar estado local
-        await get().fetchData(true);
-      } catch (error) {
-        console.error(' [CHRONOS DB] Error al eliminar evento en background:', error);
-        await get().fetchData(true);
-      }
-    })();
-  },
-
-  clearData: () => set({ 
-    blocks: [], 
-    reminders: [], 
-    expandedBlockId: null, 
-    editingEventId: null, 
-    isEditMode: false, 
-    isFormOpen: false 
-  })
-    }),
-    {
-      name: 'chronos-timeline-storage',
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ blocks: state.blocks, reminders: state.reminders }),
-    }
-  )
-);
+}));

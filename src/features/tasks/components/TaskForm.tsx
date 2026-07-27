@@ -10,9 +10,14 @@ import Animated, {
   LinearTransition,
   FadeIn,
   FadeOut,
+  interpolateColor,
 } from 'react-native-reanimated';
 import { useTimelineStore } from '../../../store/useTimelineStore';
+import { useUIStore } from '../../../store/useUIStore';
+import { useTaskStore } from '../../../store/taskStore';
 import { checkCollision, timeToSlot, durationToSlots } from '../../timeline/transformers/timeMath';
+import { BulletToggle } from '../../../ui/BulletToggle';
+import { formToTask, formToReminder, RawTaskForm, RawReminderForm } from '../transformers/taskTransformer';
 
 // Constantes de diseño
 const PILLAR_COLORS = {
@@ -114,13 +119,60 @@ const ScrollWheel: React.FC<ScrollWheelProps> = ({
   );
 };
 
+const SlidingSwitch: React.FC<{ isActive: boolean; onToggle: (val: boolean) => void }> = ({ isActive, onToggle }) => {
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 100 });
+  }, [isActive]);
+
+  const trackStyle = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      progress.value,
+      [0, 1],
+      ['rgb(239, 68, 68)', 'rgb(34, 197, 94)'],
+      'RGB'
+    );
+    return { backgroundColor };
+  });
+
+  const thumbStyle = useAnimatedStyle(() => {
+    const translateX = withSpring(isActive ? 16 : 2, { 
+      mass: 0.3,
+      damping: 16, 
+      stiffness: 300 
+    });
+    return {
+      transform: [{ translateX }],
+    };
+  });
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => onToggle(!isActive)}
+      style={{ width: 36, height: 20, borderRadius: 10, justifyContent: 'center' }}
+    >
+      <Animated.View style={[trackStyle, { width: 36, height: 20, borderRadius: 10, justifyContent: 'center' }]}>
+        <Animated.View
+          style={[
+            thumbStyle,
+            {
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              backgroundColor: '#ffffff',
+            },
+          ]}
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
 export const TaskForm: React.FC = () => {
   // --- Consumir Zustand ---
   const {
-    isFormOpen,
-    setFormOpen,
-    activeTab,
-    setActiveTab,
     taskTitle,
     setTaskTitle,
     selectedPilar,
@@ -139,11 +191,7 @@ export const TaskForm: React.FC = () => {
     setReminderTime,
     reminderDesc,
     setReminderDesc,
-    editingEventId,
-    blocks,
-    saveTask,
-    saveReminder,
-    
+
     // Pickers states
     isEditingDesc,
     isEditingTime,
@@ -153,7 +201,7 @@ export const TaskForm: React.FC = () => {
     setEditingTime,
     setEditingDuration,
     setEditingAlert,
-    
+
     pickerHour,
     pickerMinute,
     pickerAmPm,
@@ -165,6 +213,44 @@ export const TaskForm: React.FC = () => {
     setPickerDurationHour,
     setPickerDurationMin,
   } = useTimelineStore();
+
+  const {
+    saveTask,
+    saveReminder,
+    getFilteredTasks,
+    selectedDate,
+  } = useTaskStore();
+
+  const {
+    isFormOpen,
+    setFormOpen,
+    activeTab,
+    setActiveTab,
+    editingEventId,
+  } = useUIStore();
+
+  // Local notification modal state
+  const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
+    'Al instante': true,
+    '2m antes': false,
+    '5m antes': false,
+    '10m antes': false,
+    '15m antes': false,
+    '30m antes': false,
+  });
+  const [notificationType, setNotificationType] = useState<'push' | 'alarm'>('push');
+  const [isNotificationEnabled, setIsNotificationEnabled] = useState(true);
+  const notificationOpacity = useSharedValue(isNotificationEnabled ? 1 : 0.4);
+
+  useEffect(() => {
+    notificationOpacity.value = withTiming(isNotificationEnabled ? 1 : 0.4, { duration: 200 });
+  }, [isNotificationEnabled]);
+
+  const animatedNotificationStyle = useAnimatedStyle(() => {
+    return {
+      opacity: notificationOpacity.value,
+    };
+  });
 
   const [isVisible, setIsVisible] = useState(false);
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -196,6 +282,18 @@ export const TaskForm: React.FC = () => {
       setIsVisible(true);
       translateY.value = withSpring(0, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0.3, { duration: 330 });
+      
+      // Reset notification state when form opens to avoid ghost options
+      setNotificationToggles({
+        'Al instante': true,
+        '2m antes': false,
+        '5m antes': false,
+        '10m antes': false,
+        '15m antes': false,
+        '30m antes': false,
+      });
+      setNotificationType('push');
+      setIsNotificationEnabled(true);
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0, { duration: 250 });
@@ -217,20 +315,54 @@ export const TaskForm: React.FC = () => {
 
   // --- Lógica de Negocio al Guardar ---
   const handleSaveTaskSubmit = () => {
-    const success = saveTask();
-    if (!success) {
-      Alert.alert(
-        'Conflicto de Tiempo',
-        'El bloque seleccionado se superpone con otra tarea existente. Por favor, ajusta la hora de inicio o la duración.',
-        [{ text: 'Entendido' }]
-      );
+    if (activeTab === 'tareas') {
+      // Transformar raw form a Tasks
+      const rawTaskForm: RawTaskForm = {
+        pickerHour,
+        pickerMinute,
+        pickerAmPm,
+        pickerDurationHour,
+        pickerDurationMin,
+        selectedPilar,
+        taskTitle,
+        description,
+        reminderBefore,
+        editingEventId,
+        parentId: null,
+        fechaLocal: selectedDate,
+      };
+      const task = formToTask(rawTaskForm);
+      const success = saveTask(task, editingEventId);
+      if (!success) {
+        Alert.alert(
+          'Conflicto de Tiempo',
+          'El bloque seleccionado se superpone con otra tarea existente. Por favor, ajusta la hora de inicio o la duración.',
+          [{ text: 'Entendido' }]
+        );
+      } else {
+        setFormOpen(false);
+      }
+    } else {
+      // Transformar raw form a Reminder
+      const rawReminderForm: RawReminderForm = {
+        pickerHour,
+        pickerMinute,
+        pickerAmPm,
+        selectedPilar,
+        reminderDesc,
+        editingEventId,
+        fechaLocal: selectedDate,
+      };
+      const reminder = formToReminder(rawReminderForm);
+      saveReminder(reminder, editingEventId);
+      setFormOpen(false);
     }
   };
 
   const liveSlotInicio = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
   const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
-  const activeBlocksForCollision = blocks.filter(b => b.blockId !== editingEventId);
-  const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeBlocksForCollision);
+  const activeTasksForCollision = getFilteredTasks().filter(t => (t.id || t.blockId) !== editingEventId);
+  const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeTasksForCollision);
 
   if (!isVisible) return null;
 
@@ -249,8 +381,20 @@ export const TaskForm: React.FC = () => {
         pointerEvents="box-none"
       >
         <Animated.View
-          style={[animatedCardStyle]}
-          className="w-[322px] min-h-[350px] bg-[#D9D9D9] rounded-[24px] border border-black/5 p-0 overflow-hidden mb-6"
+          style={[
+            animatedCardStyle,
+            {
+              width: 322,
+              minHeight: 350,
+              backgroundColor: 'rgb(217, 217, 217)',
+              borderRadius: 24,
+              borderColor: 'rgba(0, 0, 0, 0.05)',
+              borderWidth: 1,
+              paddingVertical: 0,
+              paddingHorizontal: 0,
+              marginBottom: 24,
+            },
+          ]}
         >
           {/* Tab Bar */}
           <Animated.View layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)} className="flex-row w-full h-[48px] items-end px-3">
@@ -327,7 +471,10 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] font-normal text-center text-black/50 mb-1">Hora de inicio</Text>
                     <TouchableOpacity
                       onPress={() => setEditingTime(true)}
-                      className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center mb-2"
+                      className="w-full h-[36px] rounded-full flex-row items-center justify-center mb-2"
+                      style={{
+                        backgroundColor: 'rgb(223, 223, 223)',
+                      }}
                     >
                       <Text className="text-[12px] font-medium text-slate-800">{startTime}</Text>
                     </TouchableOpacity>
@@ -353,7 +500,10 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Hora</Text>
                     <TouchableOpacity
                       onPress={() => setEditingTime(true)}
-                      className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center mb-2"
+                      className="w-full h-[36px] rounded-full flex-row items-center justify-center mb-2"
+                      style={{
+                        backgroundColor: 'rgb(223, 223, 223)',
+                      }}
                     >
                       <Text className="text-[12px] font-medium text-slate-800">{reminderTime}</Text>
                     </TouchableOpacity>
@@ -368,7 +518,7 @@ export const TaskForm: React.FC = () => {
 
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <TouchableOpacity
-                      onPress={saveReminder}
+                      onPress={handleSaveTaskSubmit}
                       className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center ${isColliding ? 'opacity-40' : ''}`}
                     >
                       <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
@@ -384,12 +534,15 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Duración</Text>
                     <TouchableOpacity
                       onPress={() => setEditingDuration(true)}
-                      className="w-full h-[36px] bg-[#DFDFDF] rounded-full flex-row items-center justify-center mb-2"
+                      className="w-full h-[36px] rounded-full flex-row items-center justify-center mb-2"
+                      style={{
+                        backgroundColor: 'rgb(223, 223, 223)',
+                      }}
                     >
                       <Text className="text-[12px] font-medium text-slate-800">{duration}</Text>
                     </TouchableOpacity>
 
-                    <Text className="text-[13px] text-center font-bold text-black/50 mb-1">Descripción</Text>
+                    <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Descripción</Text>
                     <TouchableOpacity
                       onPress={() => setEditingDesc(true)}
                       className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center mb-2"
@@ -401,7 +554,10 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <TouchableOpacity
                       onPress={() => setFormOpen(false)}
-                      className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center"
+                      className="w-full h-[36px] rounded-full flex-row items-center justify-center"
+                      style={{
+                        backgroundColor: 'rgb(63, 63, 63)',
+                      }}
                     >
                       <Text className="text-[12px] font-normal text-white">Cancel</Text>
                     </TouchableOpacity>
@@ -411,7 +567,7 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <View className="w-full h-[36px] mb-2" />
 
-                    <Text className="text-[13px] text-center font-bold text-black/50 mb-1">Descripción</Text>
+                    <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Descripción</Text>
                     <TouchableOpacity
                       onPress={() => setEditingDesc(true)}
                       className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center mb-2"
@@ -423,7 +579,10 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <TouchableOpacity
                       onPress={() => setFormOpen(false)}
-                      className="w-full h-[36px] bg-[#3F3F3F] rounded-full flex-row items-center justify-center"
+                      className="w-full h-[36px] rounded-full flex-row items-center justify-center"
+                      style={{
+                        backgroundColor: 'rgb(63, 63, 63)',
+                      }}
                     >
                       <Text className="text-[12px] font-normal text-white">Cancel</Text>
                     </TouchableOpacity>
@@ -445,7 +604,7 @@ export const TaskForm: React.FC = () => {
                   autoFocus
                   textAlignVertical="top"
                 />
-                <TouchableOpacity onPress={() => setEditingDesc(false)} className="w-full h-[36px] bg-[#3F3F3F] rounded-full justify-center items-center">
+                <TouchableOpacity onPress={() => setEditingDesc(false)} className="w-full h-[36px] rounded-full justify-center items-center" style={{backgroundColor: 'rgb(63, 63, 63)'}}>
                   <Text className="text-[12px] font-normal text-white">Listo</Text>
                 </TouchableOpacity>
               </Animated.View>
@@ -501,28 +660,115 @@ export const TaskForm: React.FC = () => {
               </Animated.View>
             )}
 
-            {/* Alert Picker Overlay */}
+            {/* Alert Picker Overlay - NOTIFICATION MODAL REDESIGN */}
             {isEditingAlert && (
               <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col">
-                <View className="flex-row items-center justify-between mb-2">
-                  <TouchableOpacity onPress={() => setEditingAlert(false)} className="p-2 -ml-2"><Text className="text-xl font-light text-slate-800">✕</Text></TouchableOpacity>
-                  <Text className="text-sm font-normal text-slate-500">Notificación</Text>
-                  <View className="w-[30px]" />
+                {/* Header */}
+                <View className="flex-row items-center w-full mb-1.5 px-1">
+                  <TouchableOpacity onPress={() => setEditingAlert(false)} className="p-2 -ml-2 mr-3">
+                    <Text className="text-xl font-light text-slate-800">✕</Text>
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 14, fontWeight: '400', color: 'rgba(0, 0, 0, 0.5)' }}>Notificación</Text>
+                  <View className="flex-1" />
+                  <SlidingSwitch
+                    isActive={isNotificationEnabled}
+                    onToggle={setIsNotificationEnabled}
+                  />
                 </View>
-                <View className="w-[280px] self-center mt-4 flex-row flex-wrap justify-between">
-                  {['Al instante', '2m antes', '5m antes', '10m antes', '15m antes', '30m antes'].map((option) => (
+
+                {/* Divider below header */}
+                <View className="h-[1px] w-[250px] bg-slate-200 self-center mb-3" />
+
+                {/* Notifications Body with adjustable opacity */}
+                <Animated.View 
+                  style={[animatedNotificationStyle, { pointerEvents: isNotificationEnabled ? 'auto' : 'none' }]}
+                  className="flex-1"
+                >
+                  {/* 6 Notification Pills */}
+                  <View className="w-[280px] self-center flex-row flex-wrap justify-between mb-4">
+                    {['Al instante', '2m antes', '5m antes', '10m antes', '15m antes', '30m antes'].map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => {
+                          setNotificationToggles(prev => ({
+                            ...prev,
+                            [option]: !prev[option]
+                          }));
+                          // NO cerramos el modal automáticamente
+                        }}
+                        className="w-[125px] h-[36px] rounded-full justify-between items-center px-4 mb-3 flex-row"
+                        style={{
+                          backgroundColor: notificationToggles[option] ? 'rgb(223, 223, 223)' : 'rgb(255, 255, 255)',
+                          borderWidth: notificationToggles[option] ? 0 : 1,
+                          borderColor: 'rgb(226, 232, 240)',
+                        }}
+                      >
+                        <Text className="text-[12px] font-normal text-black/50 flex-1 text-left" numberOfLines={1}>{option}</Text>
+                        <BulletToggle
+                          isActive={notificationToggles[option] || false}
+                          onToggle={(newState) => {
+                            setNotificationToggles(prev => ({
+                              ...prev,
+                              [option]: newState
+                            }));
+                          }}
+                          size={12}
+                          hideBackground={true}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Divider after pills */}
+                  <View className="h-[1px] w-[250px] bg-slate-200 self-center mb-4" />
+
+                  {/* Push and Alarm Buttons */}
+                  <View className="w-[280px] self-center flex-row gap-3">
+                    {/* Push Button */}
                     <TouchableOpacity
-                      key={option}
-                      onPress={() => {
-                        setReminderBefore(option);
-                        setEditingAlert(false);
+                      onPress={() => setNotificationType('push')}
+                      className="flex-1 h-[44px] rounded-full justify-center items-center flex-row gap-2"
+                      style={{
+                        backgroundColor: notificationType === 'push' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
+                        borderWidth: notificationType === 'push' ? 0 : 1,
+                        borderColor: 'rgb(226, 232, 240)',
                       }}
-                      className={`w-[125px] h-[36px] rounded-full justify-center items-center mb-5 ${reminderBefore === option ? 'bg-[#DFDFDF] border border-transparent' : 'bg-white border border-slate-100'}`}
                     >
-                      <Text className={`text-[12px] ${reminderBefore === option ? 'font-normal text-slate-800' : 'font-medium text-slate-500'}`}>{option}</Text>
+                      <Image 
+                        source={notificationType === 'push' ? require('../../../../assets/push_active.png') : require('../../../../assets/push.png')} 
+                        style={{ width: 18, height: 18 }} 
+                        resizeMode="contain" 
+                      />
+                      <Text style={{
+                        fontSize: 14,
+                        fontWeight: '400',
+                        color: notificationType === 'push' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
+                      }}>Push</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
+
+                    {/* Alarm Button */}
+                    <TouchableOpacity
+                      onPress={() => setNotificationType('alarm')}
+                      className="flex-1 h-[44px] rounded-full justify-center items-center flex-row gap-2"
+                      style={{
+                        backgroundColor: notificationType === 'alarm' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
+                        borderWidth: notificationType === 'alarm' ? 0 : 1,
+                        borderColor: 'rgb(226, 232, 240)',
+                      }}
+                    >
+                      <Image 
+                        source={notificationType === 'alarm' ? require('../../../../assets/alarm_active.png') : require('../../../../assets/alarm.png')} 
+                        style={{ width: 18, height: 18 }} 
+                        resizeMode="contain" 
+                      />
+                      <Text style={{
+                        fontSize: 14,
+                        fontWeight: '400',
+                        color: notificationType === 'alarm' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
+                      }}>Alarma</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
               </Animated.View>
             )}
           </Animated.View>

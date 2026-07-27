@@ -1,5 +1,3 @@
-import { TaskBlock } from '../../../types';
-
 // 1. Convierte horas del formulario a Slot (0-287)
 export const timeToSlot = (hourStr: string, minStr: string, ampm: 'AM' | 'PM'): number => {
   let h = parseInt(hourStr, 10);
@@ -69,38 +67,83 @@ export const findFirstFreeSpace = (
   return currentAttempt;
 };
 
-// 5. Desglosa intervalos de slots (maneja bloques que cruzan la medianoche)
-export const getSlotsIntervals = (start: number, duration: number): { start: number, end: number }[] => {
-  const end = start + duration;
-  if (end <= 288) {
-    return [{ start, end }];
-  } else {
-    return [
-      { start, end: 288 },
-      { start: 0, end: end - 288 }
-    ];
+// 5. Verificador de Overflow: Detecta si una tarea cruza medianoche y calcula los valores de overflow
+export interface OverflowResult {
+  past12: boolean;
+  overflowSlots?: number;
+  overflowDate?: string;
+  adjustedDuration: number; // duración ajustada para el día actual (sin overflow)
+}
+
+export const checkAndCalculateOverflow = (
+  slotInicio: number,
+  duracionSlots: number,
+  currentDate: string
+): OverflowResult => {
+  const slotFin = slotInicio + duracionSlots;
+  
+  // Si la tarea termina antes o exactamente en medianoche (slot 288)
+  if (slotFin <= 288) {
+    return {
+      past12: false,
+      overflowSlots: undefined,
+      overflowDate: undefined,
+      adjustedDuration: duracionSlots,
+    };
   }
+  
+  // La tarea cruza medianoche
+  const slotsInCurrentDay = 288 - slotInicio;
+  const overflowSlotsCount = duracionSlots - slotsInCurrentDay;
+  
+  // Calcular fecha del día siguiente
+  const dateObj = new Date(currentDate);
+  dateObj.setDate(dateObj.getDate() + 1);
+  const nextDayDate = dateObj.toISOString().split('T')[0];
+  
+  return {
+    past12: true,
+    overflowSlots: overflowSlotsCount,
+    overflowDate: nextDayDate,
+    adjustedDuration: slotsInCurrentDay,
+  };
 };
 
 // 6. Algoritmo de Colisión: Detecta si un nuevo bloque choca con bloques existentes
+const intervalsOverlap = (aStart: number, aEnd: number, bStart: number, bEnd: number): boolean => {
+  return aStart < bEnd && bStart < aEnd;
+};
+
+// Función auxiliar para obtener intervalos considerando overflow
+export const getSlotsIntervals = (start: number, duration: number) => {
+  const end = start + duration;
+  if (end <= 288) {
+    return [{ start, end }];
+  }
+  return [
+    { start, end: 288 },
+    { start: 0, end: end - 288 }
+  ];
+};
+
 export const checkCollision = (
   newStart: number,
   newDuration: number,
   existingBlocks: { slotInicio: number, duracionSlots: number }[]
 ): boolean => {
   const newIntervals = getSlotsIntervals(newStart, newDuration);
-  
+
   for (const block of existingBlocks) {
     const blockIntervals = getSlotsIntervals(block.slotInicio, block.duracionSlots);
-    
+
     for (const newInt of newIntervals) {
       for (const blockInt of blockIntervals) {
-        // Si el bloque nuevo inicia antes de que el existente termine, Y el existente inicia antes de que el nuevo termine
-        if (newInt.start < blockInt.end && blockInt.start < newInt.end) {
+        if (intervalsOverlap(newInt.start, newInt.end, blockInt.start, blockInt.end)) {
           return true;
         }
       }
     }
   }
+
   return false;
 };

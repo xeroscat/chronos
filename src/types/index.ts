@@ -16,6 +16,7 @@ export type Pilar = {
 // 2. MOTOR DE NOTIFICACIONES Y ALERTAS
 // ════════════════════════════════════════════════════════════════════════════
 
+
 export type TipoAlerta = 'push' | 'alarma';
 
 export type NotificationConfig = {
@@ -64,66 +65,6 @@ export type ExecutionStatus =
   | 'unverified'; // El tiempo pasó y el usuario no interactuó (Línea de tiempo lo cruzó)
 
 // ════════════════════════════════════════════════════════════════════════════
-// 5. MODELOS DE BASE DE DATOS (DTOs - Lo que viaja a Supabase)
-// ════════════════════════════════════════════════════════════════════════════
-
-export type TaskDTO = {
-  id: string;
-  pilarId: string;
-  titulo: string;
-  descripcion: string | null;
-  startTime: string | null; // ISO 8601 (ej. "2026-06-08T10:00:00Z")
-  endTime: string | null;   // ISO 8601
-  status: ExecutionStatus;  // Reemplaza al antiguo 'completada'
-  recursos: Recurso[];
-  projectId?: string | null;      // Siempre un array, vacío por defecto
-  recordatorio?: NotificationConfig; 
-  
-  // Telemetría de Realidad (Para entrenar a la IA)
-  actualStartTime?: string | null; 
-  actualEndTime?: string | null;   
-  rescheduleCount: number;  // Cuántas veces se pospuso
-};
-
-export type StaticReminderDTO = {
-  id: string;
-  time: string;             // ISO 8601
-  descripcion: string;
-  recordatorio?: NotificationConfig; 
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// 6. VIEW MODELS (Lo que usa el Motor Gráfico M1 y la UI)
-// ════════════════════════════════════════════════════════════════════════════
-
-export type TaskBlock = {
-  id: string;                // Mismo ID que TaskDTO
-  parentId: string | null;   // null = original, "id" = fragmento post-medianoche
-  slotInicio: number;        // 0–287 (0 = 00:00, 287 = 23:55)
-  duracionSlots: number;     
-  slotFin: number;           // slotInicio + duracionSlots
-  pilarTipo: PilarType;      // Para mapear el color rápido en UI
-  status: ExecutionStatus;   // Para cambiar el color si está 'unverified'
-  fechaLocal: string;        // "YYYY-MM-DD" para agrupar en la UI
-  continuaManiana: boolean;  
-};
-
-export type ReminderPoint = {
-  id: string;
-  slot: number;              // 0-287 (Punto exacto, sin duración)
-  descripcion: string;
-};
-
-export type TaskDetail = {
-  id: string;
-  titulo: string;
-  descripcion: string | null;
-  recursos: Recurso[];
-  recordatorio?: NotificationConfig;
-  projectId?: string | null;
-};
-
-// ════════════════════════════════════════════════════════════════════════════
 // 7. ESTRUCTURAS DE LA IA (Fase 2 - Preparación)
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -151,18 +92,76 @@ export type AISuggestionBlock = {
 // ════════════════════════════════════════════════════════════════════════════
 
 // Para el Timeline 24h (M1) - Solo geometría, colores y estados visuales
-export type TimelineElement = 
-  | ({ tipoElemento: 'taskBlock' } & TaskBlock)
-  | ({ tipoElemento: 'reminderPoint' } & ReminderPoint)
+export type TimelineElement =
+  | ({ tipoElemento: 'task' } & Tasks)
+  | ({ tipoElemento: 'reminderPoint' } & Reminder)
   | ({ tipoElemento: 'aiSuggestion' } & AISuggestionBlock);
 
 // Para la lista inferior (M2) - Textos, checkboxes y configuraciones
-export type ManagerItem = 
-  | ({ tipoItem: 'task' } & TaskDetail)
-  | ({ tipoItem: 'staticReminder' } & StaticReminderDTO);
+export type ManagerItem =
+  | ({ tipoItem: 'task' } & Tasks)
+  | ({ tipoItem: 'staticReminder' } & Reminder);
 
 // Para el Modal de Edición (Cuando tocas un elemento en la gráfica)
-export type TaskUI = {
-  block: TaskBlock;
-  detail: TaskDetail;
+export type TaskUI = Tasks;
+
+// ════════════════════════════════════════════════════════════════════════════
+// 9. TIPO COMPUESTO PARA EL STORE (Tasks)
+// ════════════════════════════════════════════════════════════════════════════
+
+// Tipo completo consolidado
+export type Tasks = {
+  // General
+  id: string;
+  blockId: string; // legacy fallback
+  date: string; // ISO date string (YYYY-MM-DD)
+
+  // View
+  slotInicio: number; // 0–287 (0 = 00:00, 287 = 23:55)
+  duracionSlots: number;
+  slotFin?: number; // slotInicio + duracionSlots (calculado)
+  pilarTipo: PilarType;
+  status: string|null; // Motor de seguimiento
+  past12: boolean|null; // Division de tareas
+
+  // Overflow Date
+  overflowDate?: string  // '2025-07-13' — solo si endTime > 1440
+  overflowSlots?: number
+
+  // Details
+  title: string;
+  description: string;
+  reminderBefore?: string;
+  resources: string[]|null; // Motor de recursos externos
+  projectId: string | null;
+  tags: string[]|null; // Motor proximo a añadir
+  priority: string; // Motor de seguimiento
+  isCompleted: boolean; // Motor de seguimiento
+
+  //Supabase
+  startTime: string| null; //ISO
+  endTime: string|null; //ISO
+  version: string|null;
+  deleted: boolean|null;
+  syncPending: boolean|null;
+
+  // Telemetría de Realidad (Para entrenar a la IA)
+  actualStartTime?: string | null; 
+  actualEndTime?: string | null;   
+  rescheduleCount: number|null;  // Cuántas veces se pospuso
+};
+
+//Recordatorio unificado
+
+export type Reminder = {
+  id: string;
+  slot: number;
+  descripcion: string;
+  pilarTipo: PilarType;
+  recordatorio?: NotificationConfig;
+  //SP
+  date: string; // ISO date string (YYYY-MM-DD) for filtering
+  version: string|null;
+  deleted: boolean|null;
+  syncPending: boolean|null;
 };
