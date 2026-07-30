@@ -110,7 +110,7 @@ export const useTaskStore = create<TaskState>()(
         if (editingEventId) {
           newTasks = newTasks.map(t => ((t.id || t.blockId) === editingEventId ? optimisticTask : t));
         } else {
-          newTasks.push(taskWithOverflow);
+          newTasks.push(optimisticTask);
         }
 
         const nextDayIndex = buildDayIndex(newTasks, reminders);

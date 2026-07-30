@@ -231,8 +231,8 @@ export const TaskForm: React.FC = () => {
 
   // Local notification modal state
   const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
-    'Al instante': true,
-    '2m antes': false,
+    'Al iniciar': true,
+    'Al terminar': false,
     '5m antes': false,
     '10m antes': false,
     '15m antes': false,
@@ -285,8 +285,8 @@ export const TaskForm: React.FC = () => {
       
       // Reset notification state when form opens to avoid ghost options
       setNotificationToggles({
-        'Al instante': true,
-        '2m antes': false,
+        'Al iniciar': true,
+        'Al terminar': false,
         '5m antes': false,
         '10m antes': false,
         '15m antes': false,
@@ -330,6 +330,10 @@ export const TaskForm: React.FC = () => {
         editingEventId,
         parentId: null,
         fechaLocal: selectedDate,
+        // Notification fields
+        isNotificationEnabled,
+        notificationType,
+        notificationToggles,
       };
       const task = formToTask(rawTaskForm);
       const success = saveTask(task, editingEventId);
@@ -352,6 +356,10 @@ export const TaskForm: React.FC = () => {
         reminderDesc,
         editingEventId,
         fechaLocal: selectedDate,
+        // Notification fields
+        isNotificationEnabled,
+        notificationType,
+        notificationToggles,
       };
       const reminder = formToReminder(rawReminderForm);
       saveReminder(reminder, editingEventId);
@@ -686,7 +694,7 @@ export const TaskForm: React.FC = () => {
                 >
                   {/* 6 Notification Pills */}
                   <View className="w-[280px] self-center flex-row flex-wrap justify-between mb-4">
-                    {['Al instante', '2m antes', '5m antes', '10m antes', '15m antes', '30m antes'].map((option) => (
+                    {['Al iniciar', 'Al terminar', '5m antes', '10m antes', '15m antes', '30m antes'].map((option) => (
                       <TouchableOpacity
                         key={option}
                         onPress={() => {

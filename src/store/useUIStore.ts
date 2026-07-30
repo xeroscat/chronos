@@ -23,7 +23,7 @@ export const useUIStore = create<UIState>((set) => ({
   expandedBlockId: null,
   editingEventId: null,
 
-  setFormOpen: (open) => set({ isFormOpen: open }),
+  setFormOpen: (open) => set((state) => ({ isFormOpen: open, editingEventId: open ? state.editingEventId : null })),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setEditMode: (editMode) => set({ isEditMode: editMode }),
   setExpandedBlockId: (id) => set({ expandedBlockId: id }),

@@ -207,7 +207,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
         
         {/* Layer 2: Saved Task Blocks */}
         <Group opacity={bgBlocksOpacity}>
-          {activeBlocksForCollision.map((block) => {
+          {(isFormOpen && editingEventId ? activeBlocksForCollision : filteredBlocks).map((block) => {
             // Lógica de overflow: usar isOverflow flag calculado en getFilteredBlocks
             const isOverflow = block.isOverflow;
             const renderSlotInicio = isOverflow ? 0 : block.slotInicio;

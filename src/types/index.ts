@@ -18,16 +18,19 @@ export type Pilar = {
 
 
 export type TipoAlerta = 'push' | 'alarma';
-
-export type NotificationConfig = {
+export type MomentoAlerta = 'inicio'|'fin'|'antes';
+export type Config = {
+  id: string|null;
   activo: boolean;
   tipoAlerta: TipoAlerta;
-  minutosAntes: number;     // 0 = a la hora exacta, 15 = 15 min antes
-  notificacionId?: string;  // ID del OS (Expo) para cancelar/reprogramar
+  momento: MomentoAlerta; // Recordar solo de activa si aqui hay un 'antes'
+  offsetNotif: number;     // 0 = a la hora exacta, 15 = 15 min antes y solo se llama si MomentoAlerta === 'antes'
+  osID: string|null;  // ID del OS (Expo) para cancelar/reprogramar
 };
+export type Notification = Config[];
 
 // ════════════════════════════════════════════════════════════════════════════
-// 3. RECURSOS ADJUNTOS (Uniones Discriminadas)
+// 3. RECURSOS ADJUNTOS (Uniones Discriminadas) no usado
 // ════════════════════════════════════════════════════════════════════════════
 
 export type RecursoBase = {
@@ -54,7 +57,7 @@ export type RecursoNota = RecursoBase & {
 export type Recurso = RecursoChecklist | RecursoArchivo | RecursoNota;
 
 // ════════════════════════════════════════════════════════════════════════════
-// 4. ESTADO DE EJECUCIÓN Y TELEMETRÍA (Para la IA)
+// 4. ESTADO DE EJECUCIÓN Y TELEMETRÍA (Para la IA) no usado
 // ════════════════════════════════════════════════════════════════════════════
 
 export type ExecutionStatus = 
@@ -65,7 +68,7 @@ export type ExecutionStatus =
   | 'unverified'; // El tiempo pasó y el usuario no interactuó (Línea de tiempo lo cruzó)
 
 // ════════════════════════════════════════════════════════════════════════════
-// 7. ESTRUCTURAS DE LA IA (Fase 2 - Preparación)
+// 7. ESTRUCTURAS DE LA IA (Fase 2 - Preparación) no usado
 // ════════════════════════════════════════════════════════════════════════════
 
 export type DailyMetricDTO = {
@@ -130,13 +133,14 @@ export type Tasks = {
 
   // Details
   title: string;
-  description: string;
-  reminderBefore?: string;
+  description: string; 
   resources: string[]|null; // Motor de recursos externos
   projectId: string | null;
   tags: string[]|null; // Motor proximo a añadir
   priority: string; // Motor de seguimiento
   isCompleted: boolean; // Motor de seguimiento
+
+  recordatorio: Notification[];
 
   //Supabase
   startTime: string| null; //ISO
@@ -154,11 +158,12 @@ export type Tasks = {
 //Recordatorio unificado
 
 export type Reminder = {
-  id: string;
+  id?: string;
+  taskid?: string;
   slot: number;
   descripcion: string;
   pilarTipo: PilarType;
-  recordatorio?: NotificationConfig;
+  recordatorio?: Notification[];
   //SP
   date: string; // ISO date string (YYYY-MM-DD) for filtering
   version: string|null;

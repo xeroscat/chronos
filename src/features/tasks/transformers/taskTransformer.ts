@@ -1,4 +1,4 @@
-import { Tasks, Reminder, PilarType } from '../../../types';
+import { Tasks, Reminder, PilarType, Notification, Config, TipoAlerta, MomentoAlerta } from '../../../types';
 import { timeToSlot, durationToSlots, checkAndCalculateOverflow } from '../../timeline/transformers/timeMath';
 
 /**
@@ -63,6 +63,10 @@ export type RawTaskForm = {
   editingEventId?: string | null; // optional, present when editing
   parentId?: string | null;
   fechaLocal?: string | null;
+  // Notification fields
+  isNotificationEnabled: boolean;
+  notificationType: TipoAlerta;
+  notificationToggles: Record<string, boolean>;
 };
 
 export type RawReminderForm = {
@@ -73,6 +77,56 @@ export type RawReminderForm = {
   reminderDesc: string;
   editingEventId?: string | null;
   fechaLocal?: string | null;
+  // Notification fields
+  isNotificationEnabled: boolean;
+  notificationType: TipoAlerta;
+  notificationToggles: Record<string, boolean>;
+};
+
+/**
+ * Convierte el estado de notificaciones del formulario a Notification[]
+ * @param enabled - Si el slider de notificaciones está activado
+ * @param tipoAlerta - Tipo de alerta ('push' | 'alarma')
+ * @param toggles - Estado de las pastillas de notificación
+ * @returns Array de Config o array vacío si notificaciones están desactivadas
+ */
+export const formToNotification = (
+  enabled: boolean,
+  tipoAlerta: TipoAlerta,
+  toggles: Record<string, boolean>
+): Notification => {
+  if (!enabled) {
+    return [];
+  }
+
+  const configs: Config[] = [];
+
+  // Mapeo de pastillas a configuración
+  const toggleMapping: Record<string, { momento: MomentoAlerta; offsetNotif: number }> = {
+    'Al iniciar': { momento: 'inicio', offsetNotif: 0 },
+    'Al terminar': { momento: 'fin', offsetNotif: 0 },
+    '5m antes': { momento: 'antes', offsetNotif: 5 },
+    '10m antes': { momento: 'antes', offsetNotif: 10 },
+    '15m antes': { momento: 'antes', offsetNotif: 15 },
+    '30m antes': { momento: 'antes', offsetNotif: 30 },
+  };
+
+  // Crear Config para cada pastilla activa
+  for (const [toggleKey, isActive] of Object.entries(toggles)) {
+    if (isActive && toggleMapping[toggleKey]) {
+      const { momento, offsetNotif } = toggleMapping[toggleKey];
+      configs.push({
+        id: null,
+        activo: true,
+        tipoAlerta,
+        momento,
+        offsetNotif,
+        osID: null,
+      });
+    }
+  }
+
+  return configs;
 };
 
 export const formToTask = (form: RawTaskForm): Tasks => {
@@ -84,6 +138,13 @@ export const formToTask = (form: RawTaskForm): Tasks => {
 
   // Verificar si la tarea cruza medianoche (solo past12, sin guardar overflow)
   const overflowResult = checkAndCalculateOverflow(slotInicio, duracionSlots, date);
+
+  // Convertir notificaciones del formulario a Notification[]
+  const recordatorio = formToNotification(
+    form.isNotificationEnabled,
+    form.notificationType,
+    form.notificationToggles
+  );
 
   return {
     // General
@@ -113,6 +174,8 @@ export const formToTask = (form: RawTaskForm): Tasks => {
     priority: 'medium',
     isCompleted: false,
 
+    recordatorio,
+
     // Supabase - Calculados con formato ISO compatible con Google Calendar
     startTime: slotToISO(slotInicio, date),
     endTime: slotToISO(slotInicio + duracionSlots, date),
@@ -133,13 +196,20 @@ export const formToReminder = (form: RawReminderForm): Reminder => {
   const slot = timeToSlot(form.pickerHour, form.pickerMinute, form.pickerAmPm);
   const id = form.editingEventId || `temp-${Date.now()}`;
 
+  // Convertir notificaciones del formulario a Notification[]
+  const recordatorio = formToNotification(
+    form.isNotificationEnabled,
+    form.notificationType,
+    form.notificationToggles
+  );
+
   return {
     id,
     slot,
     descripcion: form.reminderDesc,
     pilarTipo: form.selectedPilar,
     date: form.fechaLocal ?? new Date().toISOString().slice(0, 10),
-    recordatorio: undefined, // Dejado undefined - función por implementar
+    recordatorio,
     // Sync - Campos para control de sincronización
     version: null,
     deleted: null,
