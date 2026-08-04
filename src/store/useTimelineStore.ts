@@ -176,7 +176,7 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
     const activeTab = event.type === 'task' ? 'tareas' : 'recordatorios';
 
     // Set UI state in useUIStore
-    useUIStore.getState().setEditingEventId(editingEventId);
+    useUIStore.getState().setEditingEventId(editingEventId ?? null);
     useUIStore.getState().setActiveTab(activeTab);
     useUIStore.getState().setFormOpen(true);
 
@@ -188,7 +188,7 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
       set({
         taskTitle: event.title || 'Nueva Tarea',
         description: event.description || '',
-        reminderBefore: event.reminderBefore || '5m antes',
+        reminderBefore: '5m antes',
         pickerHour: timeParts.h,
         pickerMinute: timeParts.m,
         pickerAmPm: timeParts.ampm,

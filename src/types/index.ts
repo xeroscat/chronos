@@ -24,7 +24,7 @@ export type Config = {
   activo: boolean;
   tipoAlerta: TipoAlerta;
   momento: MomentoAlerta; // Recordar solo de activa si aqui hay un 'antes'
-  offsetNotif: number;     // 0 = a la hora exacta, 15 = 15 min antes y solo se llama si MomentoAlerta === 'antes'
+  offsetNotif: number | null;     // 0 = a la hora exacta, 15 = 15 min antes y solo se llama si MomentoAlerta === 'antes'
   osID: string|null;  // ID del OS (Expo) para cancelar/reprogramar
 };
 export type Notification = Config[];

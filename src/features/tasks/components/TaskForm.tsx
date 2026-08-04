@@ -18,6 +18,7 @@ import { useTaskStore } from '../../../store/taskStore';
 import { checkCollision, timeToSlot, durationToSlots } from '../../timeline/transformers/timeMath';
 import { BulletToggle } from '../../../ui/BulletToggle';
 import { formToTask, formToReminder, RawTaskForm, RawReminderForm } from '../transformers/taskTransformer';
+import { TipoAlerta } from '../../../types';
 
 // Constantes de diseño
 const PILLAR_COLORS = {
@@ -238,7 +239,7 @@ export const TaskForm: React.FC = () => {
     '15m antes': false,
     '30m antes': false,
   });
-  const [notificationType, setNotificationType] = useState<'push' | 'alarm'>('push');
+  const [notificationType, setNotificationType] = useState<TipoAlerta>('push');
   const [isNotificationEnabled, setIsNotificationEnabled] = useState(true);
   const notificationOpacity = useSharedValue(isNotificationEnabled ? 1 : 0.4);
 
@@ -326,7 +327,6 @@ export const TaskForm: React.FC = () => {
         selectedPilar,
         taskTitle,
         description,
-        reminderBefore,
         editingEventId,
         parentId: null,
         fechaLocal: selectedDate,
@@ -756,23 +756,23 @@ export const TaskForm: React.FC = () => {
 
                     {/* Alarm Button */}
                     <TouchableOpacity
-                      onPress={() => setNotificationType('alarm')}
+                      onPress={() => setNotificationType('alarma')}
                       className="flex-1 h-[44px] rounded-full justify-center items-center flex-row gap-2"
                       style={{
-                        backgroundColor: notificationType === 'alarm' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
-                        borderWidth: notificationType === 'alarm' ? 0 : 1,
+                        backgroundColor: notificationType === 'alarma' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
+                        borderWidth: notificationType === 'alarma' ? 0 : 1,
                         borderColor: 'rgb(226, 232, 240)',
                       }}
                     >
                       <Image 
-                        source={notificationType === 'alarm' ? require('../../../../assets/alarm_active.png') : require('../../../../assets/alarm.png')} 
+                        source={notificationType === 'alarma' ? require('../../../../assets/alarm_active.png') : require('../../../../assets/alarm.png')} 
                         style={{ width: 18, height: 18 }} 
                         resizeMode="contain" 
                       />
                       <Text style={{
                         fontSize: 14,
                         fontWeight: '400',
-                        color: notificationType === 'alarm' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
+                        color: notificationType === 'alarma' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
                       }}>Alarma</Text>
                     </TouchableOpacity>
                   </View>

@@ -59,7 +59,6 @@ export type RawTaskForm = {
   selectedPilar: PilarType;
   taskTitle: string;
   description: string | null;
-  reminderBefore: string;
   editingEventId?: string | null; // optional, present when editing
   parentId?: string | null;
   fechaLocal?: string | null;
@@ -84,7 +83,8 @@ export type RawReminderForm = {
 };
 
 /**
- * Convierte el estado de notificaciones del formulario a Notification[]
+ * Convierte el estado de notificaciones del formulario a un array de configuraciones independientes.
+ * Cada pastilla activa genera un Config distinto.
  * @param enabled - Si el slider de notificaciones está activado
  * @param tipoAlerta - Tipo de alerta ('push' | 'alarma')
  * @param toggles - Estado de las pastillas de notificación
@@ -94,12 +94,12 @@ export const formToNotification = (
   enabled: boolean,
   tipoAlerta: TipoAlerta,
   toggles: Record<string, boolean>
-): Notification => {
+): Notification[] => {
   if (!enabled) {
     return [];
   }
 
-  const configs: Config[] = [];
+  const configs: Notification[] = [];
 
   // Mapeo de pastillas a configuración
   const toggleMapping: Record<string, { momento: MomentoAlerta; offsetNotif: number }> = {
@@ -167,7 +167,6 @@ export const formToTask = (form: RawTaskForm): Tasks => {
     // Details
     title: form.taskTitle,
     description: form.description ?? '',
-    reminderBefore: form.reminderBefore,
     resources: null,
     projectId: null,
     tags: null,

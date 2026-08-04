@@ -305,7 +305,7 @@ export default function App() {
                             <TouchableOpacity
                               onPress={(e) => {
                                 e.stopPropagation();
-                                deleteEvent(reminder.id, 'reminder');
+                                deleteEvent(reminder.id ?? '', 'reminder');
                               }}
                               className="w-[28px] h-[28px] bg-red-500 rounded-full items-center justify-center ml-2 border-2 border-white"
                             >

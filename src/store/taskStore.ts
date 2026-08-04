@@ -1,14 +1,20 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { Tasks, Reminder } from '../types';
 import { supabase } from '../core/supabase';
 import { localSyncGate } from '../core/localSyncGate';
 import { PilarType } from '../types';
 import { checkAndCalculateOverflow } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
+import { storage } from '../storage/mmkv';
 
 const LOCAL_STORAGE_KEY = 'chronos-task-storage';
+
+const mmkvStorage: StateStorage = {
+  getItem: (key) => storage.getString(key) ?? null,
+  setItem: (key, value) => storage.set(key, value),
+  removeItem: (key) => storage.remove(key),
+};
 
 // --- HELPERS DEL ÍNDICE POR DÍA ---
 const buildDayIndex = (tasks: Tasks[], reminders: Reminder[]): Record<string, string[]> => {
@@ -34,7 +40,9 @@ const buildDayIndex = (tasks: Tasks[], reminders: Reminder[]): Record<string, st
   });
 
   reminders.forEach((reminder) => {
-    addToIndex(reminder.date, reminder.id);
+    if (reminder.id) {
+      addToIndex(reminder.date, reminder.id);
+    }
   });
 
   return index;
@@ -194,7 +202,7 @@ export const useTaskStore = create<TaskState>()(
     }),
     {
       name: LOCAL_STORAGE_KEY,
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => mmkvStorage),
       version: 1,
       partialize: (state) => ({
         tasks: state.tasks,
