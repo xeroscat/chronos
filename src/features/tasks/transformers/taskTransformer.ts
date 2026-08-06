@@ -1,5 +1,5 @@
 import { Tasks, Reminder, PilarType, Notification, Config, TipoAlerta, MomentoAlerta } from '../../../types';
-import { timeToSlot, durationToSlots, checkAndCalculateOverflow } from '../../timeline/transformers/timeMath';
+import { timeToSlot, durationToSlots, checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../../timeline/transformers/timeMath';
 
 /**
  * Convierte un slot (0-287) a timestamp ISO 8601
@@ -11,7 +11,7 @@ const slotToISO = (slot: number, date: string): string => {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   
-  const dateObj = new Date(date);
+  const dateObj = localDateStringToMidnight(date);
   dateObj.setHours(hours, minutes, 0, 0);
   
   // Obtener offset de zona horaria en formato ±HH:MM
@@ -99,7 +99,7 @@ export const formToNotification = (
     return [];
   }
 
-  const configs: Notification[] = [];
+  const configs: Config[] = [];
 
   // Mapeo de pastillas a configuración
   const toggleMapping: Record<string, { momento: MomentoAlerta; offsetNotif: number }> = {
@@ -126,13 +126,13 @@ export const formToNotification = (
     }
   }
 
-  return configs;
+  return [configs];
 };
 
 export const formToTask = (form: RawTaskForm): Tasks => {
   const slotInicio = timeToSlot(form.pickerHour, form.pickerMinute, form.pickerAmPm);
   const duracionSlots = durationToSlots(form.pickerDurationHour, form.pickerDurationMin);
-  const date = form.fechaLocal ?? new Date().toISOString().slice(0, 10);
+  const date = form.fechaLocal ?? getLocalDateString();
 
   const id = form.editingEventId || `temp-${Date.now()}`;
 
@@ -160,9 +160,9 @@ export const formToTask = (form: RawTaskForm): Tasks => {
     status: 'planned',
     past12: overflowResult.past12,
 
-    // Overflow Date - No guardamos overflowDate/overflowSlots, se calculan en renderizado
-    overflowDate: undefined,
-    overflowSlots: undefined,
+    // Overflow Date - Explicitly clean up overflow fields when overflow is false
+    overflowDate: overflowResult.past12 ? overflowResult.overflowDate : undefined,
+    overflowSlots: overflowResult.past12 ? overflowResult.overflowSlots : undefined,
 
     // Details
     title: form.taskTitle,
@@ -207,7 +207,7 @@ export const formToReminder = (form: RawReminderForm): Reminder => {
     slot,
     descripcion: form.reminderDesc,
     pilarTipo: form.selectedPilar,
-    date: form.fechaLocal ?? new Date().toISOString().slice(0, 10),
+    date: form.fechaLocal ?? getLocalDateString(),
     recordatorio,
     // Sync - Campos para control de sincronización
     version: null,

@@ -4,44 +4,77 @@ import { Tasks, Reminder } from '../types';
 import { supabase } from '../core/supabase';
 import { localSyncGate } from '../core/localSyncGate';
 import { PilarType } from '../types';
-import { checkAndCalculateOverflow } from '../features/timeline/transformers/timeMath';
+import { checkAndCalculateOverflow, getLocalDateString } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
 import { storage } from '../storage/mmkv';
 
 const LOCAL_STORAGE_KEY = 'chronos-task-storage';
 
 const mmkvStorage: StateStorage = {
-  getItem: (key) => storage.getString(key) ?? null,
+  getItem: (key) => {
+    const value = storage.getString(key);
+    return value ?? null;
+  },
   setItem: (key, value) => storage.set(key, value),
-  removeItem: (key) => storage.remove(key),
+  removeItem: (key) => storage.delete(key),
 };
 
-// --- HELPERS DEL ÍNDICE POR DÍA ---
+// --- INCREMENTAL INDEX HELPERS ---
+function addToIndex(
+  index: Record<string, string[]>,
+  date: string,
+  id: string
+): Record<string, string[]> {
+  if (!date || !id) return index
+  const current = index[date] ?? []
+  if (current.includes(id)) return index
+  return { ...index, [date]: [...current, id] }
+}
+
+function removeFromIndex(
+  index: Record<string, string[]>,
+  date: string,
+  id: string
+): Record<string, string[]> {
+  if (!index[date]) return index
+  const cleaned = index[date].filter(i => i !== id)
+  if (cleaned.length === 0) {
+    const next = { ...index }
+    delete next[date]
+    return next
+  }
+  return { ...index, [date]: cleaned }
+}
+
+function migrateInIndex(
+  index: Record<string, string[]>,
+  id: string,
+  oldDate: string,
+  newDate: string
+): Record<string, string[]> {
+  const afterRemove = removeFromIndex(index, oldDate, id)
+  return addToIndex(afterRemove, newDate, id)
+}
+
+// --- FULL INDEX REBUILD (STANDALONE UTILITY) ---
 const buildDayIndex = (tasks: Tasks[], reminders: Reminder[]): Record<string, string[]> => {
   const index: Record<string, string[]> = {};
 
-  const addToIndex = (date: string, id: string) => {
-    if (!date || !id) return;
-
-    const current = index[date] ?? [];
-    if (!current.includes(id)) {
-      index[date] = [...current, id];
-    }
-  };
-
   tasks.forEach((task) => {
-    // Indexar por fecha principal
-    addToIndex(task.date, task.id);
-    
-    // Indexar por fecha de overflow si existe
-    if (task.overflowDate) {
-      addToIndex(task.overflowDate, task.id);
+    if (task.id) {
+      // Indexar por fecha principal
+      addToIndex(index, task.date, task.id);
+      
+      // Indexar por fecha de overflow si existe
+      if (task.overflowDate) {
+        addToIndex(index, task.overflowDate, task.id);
+      }
     }
   });
 
   reminders.forEach((reminder) => {
     if (reminder.id) {
-      addToIndex(reminder.date, reminder.id);
+      addToIndex(index, reminder.date, reminder.id);
     }
   });
 
@@ -63,7 +96,10 @@ interface TaskState {
   deleteEvent: (id: string, type: 'task' | 'reminder') => Promise<void>;
   clearData: () => void;
   rebuildDayIndex: () => void;
+  ensureIndexConsistency: () => void;
+  validateIndexConsistency: () => boolean;
   getIdsForDay: (date: string) => string[];
+  getTasksForDay: (date?: string) => Tasks[];
 
   // Date filtering
   getFilteredTasks: () => Tasks[];
@@ -77,7 +113,7 @@ export const useTaskStore = create<TaskState>()(
       reminders: [],
       dayIndex: {},
       isLoading: false,
-      selectedDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+      selectedDate: getLocalDateString(), // Today's date in YYYY-MM-DD format
 
       setSelectedDate: (date) => set({ selectedDate: date }),
 
@@ -85,11 +121,18 @@ export const useTaskStore = create<TaskState>()(
       fetchData: async (silent = false) => {
         // MODO OFFLINE: No cargar de Supabase, solo usar datos locales persistidos
         if (!silent) set({ isLoading: false });
+
+        // Ensure index consistency on first load
+        const { validateIndexConsistency, ensureIndexConsistency } = get();
+        if (!validateIndexConsistency()) {
+          if (__DEV__) console.warn('[dayIndex] inconsistency detected on load');
+          ensureIndexConsistency();
+        }
       },
 
       // --- GUARDADO LOCAL DE TAREAS ---
       saveTask: async (task: Tasks, editingEventId: string | null) => {
-        const { tasks, reminders } = get();
+        const { tasks, dayIndex } = get();
 
         // --- VERIFICACIÓN DE OVERFLOW ---
         const overflowResult = checkAndCalculateOverflow(
@@ -102,8 +145,12 @@ export const useTaskStore = create<TaskState>()(
         const taskWithOverflow: Tasks = {
           ...task,
           past12: overflowResult.past12,
-          overflowDate: overflowResult.overflowDate,
-          overflowSlots: overflowResult.overflowSlots,
+          overflowDate: overflowResult.past12 
+            ? overflowResult.overflowDate 
+            : undefined,         // ← explicit cleanup
+          overflowSlots: overflowResult.past12 
+            ? overflowResult.overflowSlots 
+            : undefined,         // ← explicit cleanup
         };
 
         // --- ACTUALIZACIÓN OPTIMISTA ---
@@ -114,15 +161,47 @@ export const useTaskStore = create<TaskState>()(
           blockId: optimisticId,
         };
 
-        let newTasks = [...tasks];
-        if (editingEventId) {
-          newTasks = newTasks.map(t => ((t.id || t.blockId) === editingEventId ? optimisticTask : t));
+        // Detect operation type
+        const existingTask = editingEventId ? tasks.find(t => (t.id || t.blockId) === editingEventId) : undefined;
+        
+        if (!editingEventId || !existingTask) {
+          // INSERT: new task
+          set(() => {
+            const newTasks = [...tasks, optimisticTask];
+            const newIndex = addToIndex(dayIndex, optimisticTask.date, optimisticTask.id);
+            const finalIndex = optimisticTask.overflowDate
+              ? addToIndex(newIndex, optimisticTask.overflowDate, optimisticTask.id)
+              : newIndex;
+            return { tasks: newTasks, dayIndex: finalIndex };
+          });
+        } else if (existingTask.date === optimisticTask.date) {
+          // UPDATE: same day edit
+          set(() => {
+            const newTasks = tasks.map(t => 
+              (t.id || t.blockId) === editingEventId ? optimisticTask : t
+            );
+            // dayIndex does NOT change on same-day edit
+            return { tasks: newTasks };
+          });
         } else {
-          newTasks.push(optimisticTask);
+          // MIGRATE: date changed
+          set(() => {
+            const newTasks = tasks.map(t => 
+              (t.id || t.blockId) === editingEventId ? optimisticTask : t
+            );
+            let newIndex = migrateInIndex(
+              dayIndex, editingEventId, existingTask.date, optimisticTask.date
+            );
+            // Handle overflow changes
+            if (existingTask.overflowDate) {
+              newIndex = removeFromIndex(newIndex, existingTask.overflowDate, editingEventId);
+            }
+            if (optimisticTask.overflowDate) {
+              newIndex = addToIndex(newIndex, optimisticTask.overflowDate, editingEventId);
+            }
+            return { tasks: newTasks, dayIndex: newIndex };
+          });
         }
-
-        const nextDayIndex = buildDayIndex(newTasks, reminders);
-        set({ tasks: newTasks, dayIndex: nextDayIndex });
 
         // MODO OFFLINE: Solo guardado local, sin sincronización remota
         return true;
@@ -130,7 +209,7 @@ export const useTaskStore = create<TaskState>()(
 
       // --- GUARDADO LOCAL DE RECORDATORIOS ---
       saveReminder: async (reminder: Reminder, editingEventId: string | null) => {
-        const { reminders, tasks } = get();
+        const { reminders, dayIndex } = get();
 
         // --- ACTUALIZACIÓN OPTIMISTA ---
         const optimisticId = editingEventId || reminder.id;
@@ -140,13 +219,34 @@ export const useTaskStore = create<TaskState>()(
         };
 
         let newReminders = [...reminders];
+        let nextDayIndex = dayIndex;
+
         if (editingEventId) {
+          // Find existing reminder to get old date
+          const existingReminder = reminders.find(r => r.id === editingEventId);
+          
+          // Remove from old date
+          if (existingReminder && existingReminder.id) {
+            nextDayIndex = removeFromIndex(nextDayIndex, existingReminder.date, existingReminder.id);
+          }
+
+          // Update reminder
           newReminders = newReminders.map(r => r.id === editingEventId ? optimisticReminder : r);
+
+          // Add to new date
+          if (optimisticReminder.id) {
+            nextDayIndex = addToIndex(nextDayIndex, optimisticReminder.date, optimisticReminder.id);
+          }
         } else {
+          // New reminder - just add it
           newReminders.push(optimisticReminder);
+
+          // Add to index
+          if (optimisticReminder.id) {
+            nextDayIndex = addToIndex(nextDayIndex, optimisticReminder.date, optimisticReminder.id);
+          }
         }
 
-        const nextDayIndex = buildDayIndex(tasks, newReminders);
         set({ reminders: newReminders, dayIndex: nextDayIndex });
 
         // MODO OFFLINE: Solo guardado local, sin sincronización remota
@@ -154,17 +254,41 @@ export const useTaskStore = create<TaskState>()(
 
       // --- ELIMINAR (DELETE en cascada por FK) ---
       deleteEvent: async (id, type) => {
-        const { tasks, reminders } = get();
+        const { tasks, reminders, dayIndex } = get();
 
-        // --- ACTUALIZACIÓN OPTIMISTA ---
         if (type === 'task') {
-          const nextTasks = tasks.filter(t => (t.id || t.blockId) !== id);
-          const nextDayIndex = buildDayIndex(nextTasks, reminders);
-          set({ tasks: nextTasks, dayIndex: nextDayIndex });
+          set((state) => {
+            const target = state.tasks.find(t => t.id === id);
+            if (!target) {
+              if (__DEV__) {
+                console.warn(`[deleteEvent] target not found for id: ${id}`);
+              }
+              return state;
+            }
+            let newIndex = removeFromIndex(state.dayIndex, target.date, id);
+            if (target.overflowDate) {
+              newIndex = removeFromIndex(newIndex, target.overflowDate, id);
+            }
+            return {
+              tasks: state.tasks.filter(t => t.id !== id),
+              dayIndex: newIndex
+            };
+          });
         } else {
-          const nextReminders = reminders.filter(r => r.id !== id);
-          const nextDayIndex = buildDayIndex(tasks, nextReminders);
-          set({ reminders: nextReminders, dayIndex: nextDayIndex });
+          set((state) => {
+            const target = state.reminders.find(r => r.id === id);
+            if (!target) {
+              if (__DEV__) {
+                console.warn(`[deleteEvent] target not found for id: ${id}`);
+              }
+              return state;
+            }
+            const newIndex = removeFromIndex(state.dayIndex, target.date, id);
+            return {
+              reminders: state.reminders.filter(r => r.id !== id),
+              dayIndex: newIndex
+            };
+          });
         }
 
         // MODO OFFLINE: Solo eliminación local, sin sincronización remota
@@ -183,6 +307,30 @@ export const useTaskStore = create<TaskState>()(
         set({ dayIndex: buildDayIndex(tasks, reminders) });
       },
 
+      // --- CONSISTENCY CHECK FOR INDEX ---
+      ensureIndexConsistency: () => {
+        const { tasks, reminders } = get();
+        const correctIndex = buildDayIndex(tasks, reminders);
+        set({ dayIndex: correctIndex });
+        if (__DEV__) {
+          console.log('[dayIndex] rebuilt from source of truth');
+        }
+      },
+
+      validateIndexConsistency: () => {
+        const { tasks, reminders, dayIndex } = get();
+        const allIds = new Set([
+          ...tasks.map(t => t.id).filter(Boolean),
+          ...reminders.map(r => r.id).filter(Boolean)
+        ]);
+        for (const ids of Object.values(dayIndex)) {
+          for (const id of ids) {
+            if (!allIds.has(id)) return false;
+          }
+        }
+        return true;
+      },
+
       // --- CONSULTA DEL ÍNDICE POR DÍA ---
       getIdsForDay: (date) => {
         const { dayIndex } = get();
@@ -199,11 +347,28 @@ export const useTaskStore = create<TaskState>()(
         const { reminders, selectedDate } = get();
         return getFilteredRemindersSelector(reminders, selectedDate);
       },
+
+      getTasksForDay: (date?: string) => {
+        const { tasks, dayIndex, selectedDate } = get();
+        const targetDate = date ?? selectedDate;
+        const ids = dayIndex[targetDate] ?? [];
+        const idSet = new Set(ids);
+        return tasks.filter(t => idSet.has(t.id));
+      },
     }),
     {
       name: LOCAL_STORAGE_KEY,
       storage: createJSONStorage(() => mmkvStorage),
-      version: 1,
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          // v1 → v2: rebuild index from tasks/reminders
+          // because v1 index may not have overflow entries
+          const { tasks = [], reminders = [] } = persistedState;
+          persistedState.dayIndex = buildDayIndex(tasks, reminders);
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
         tasks: state.tasks,
         reminders: state.reminders,

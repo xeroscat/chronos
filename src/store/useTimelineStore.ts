@@ -14,7 +14,7 @@ export type RenderBlock = {
   slotFin?: number;
   pilarTipo: PilarType;
   status: string | null;
-  past12: boolean | null;
+  past12: boolean;
   isOverflow?: boolean; // Flag para identificar si este bloque es renderizado como overflow
   overflowSlots?: number; // Solo si isOverflow es true
 };

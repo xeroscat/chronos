@@ -1,3 +1,18 @@
+// 0. Date Utilities - Always use these for date string handling
+export function getLocalDateString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function localDateStringToMidnight(dateStr: string): Date {
+  // Parses 'YYYY-MM-DD' as LOCAL midnight, not UTC midnight
+  // new Date('YYYY-MM-DD') is UTC — this fixes that
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
+}
+
 // 1. Convierte horas del formulario a Slot (0-287)
 export const timeToSlot = (hourStr: string, minStr: string, ampm: 'AM' | 'PM'): number => {
   let h = parseInt(hourStr, 10);
@@ -96,15 +111,15 @@ export const checkAndCalculateOverflow = (
   const slotsInCurrentDay = 288 - slotInicio;
   const overflowSlotsCount = duracionSlots - slotsInCurrentDay;
   
-  // Calcular fecha del día siguiente
-  const dateObj = new Date(currentDate);
-  dateObj.setDate(dateObj.getDate() + 1);
-  const nextDayDate = dateObj.toISOString().split('T')[0];
+  // Calcular fecha del día siguiente using local midnight
+  const d = localDateStringToMidnight(currentDate);
+  d.setDate(d.getDate() + 1);
+  const overflowDate = getLocalDateString(d);
   
   return {
     past12: true,
     overflowSlots: overflowSlotsCount,
-    overflowDate: nextDayDate,
+    overflowDate: overflowDate,
     adjustedDuration: slotsInCurrentDay,
   };
 };

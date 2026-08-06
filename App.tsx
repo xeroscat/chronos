@@ -124,6 +124,23 @@ export default function App() {
       {/* Header Block */}
       <View className="w-full h-[55px] bg-white flex-row justify-between items-center px-[26px]">
         <Text className="text-[22px] font-bold text-black">Chronos</Text>
+        
+        {/* Botones temporales con flechas */}
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <TouchableOpacity 
+            className="w-[36px] h-[36px] bg-slate-100 rounded-full items-center justify-center border border-slate-200"
+            activeOpacity={0.7}
+          >
+            <Text className="text-slate-700 font-bold text-lg">◀</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            className="w-[36px] h-[36px] bg-slate-100 rounded-full items-center justify-center border border-slate-200"
+            activeOpacity={0.7}
+          >
+            <Text className="text-slate-700 font-bold text-lg">▶</Text>
+          </TouchableOpacity>
+        </View>
+
         <View className="flex-row items-center" style={{ gap: 12 }}>
           <Text className="text-[15px] font-normal text-black/60">
             {getFormattedDate()}

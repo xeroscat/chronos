@@ -26,7 +26,13 @@
       [
         "expo-build-properties",
         {
+          "ios": {
+            "newArchEnabled": true,
+            "hermesEnabled": true
+          },
           "android": {
+            "newArchEnabled": true,
+            "hermesEnabled": true,
             "buildConfig": true,
             "extraMavenRepos": [],
             "cmakeArgs": "-DANDROID_STL=c++_shared"
