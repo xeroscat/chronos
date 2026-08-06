@@ -20,6 +20,7 @@ import { TaskForm } from './src/features/tasks/components/TaskForm';
 import { Tasks, Reminder } from './src/types';
 import { slotToTimeParts } from './src/features/timeline/transformers/timeMath';
 import { getFilteredTasksWithAdjustedValues, getFilteredReminders } from './src/features/tasks/selectors';
+import { bootNotificationService } from './src/features/background/notifications';
 
 type AdjustedTask = Tasks & { effectiveSlotInicio: number; effectiveDuracionSlots: number; isOverflow: boolean | null };
 type UnifiedEvent = (AdjustedTask & { type: 'task'; sortSlot: number }) | (Reminder & { type: 'reminder'; sortSlot: number });
@@ -94,6 +95,13 @@ export default function App() {
     // MODO OFFLINE: Cargar datos siempre, independientemente de sesión
     fetchData();
   }, [fetchData]);
+
+  // Boot notification service once on mount and store result
+  useEffect(() => {
+    bootNotificationService().then(({ granted, alarmSupported }) => {
+      useTaskStore.getState().setNotifPermissions(granted, alarmSupported);
+    });
+  }, []);
 
   if (isAuthLoading) {
     return (

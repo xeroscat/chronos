@@ -94,7 +94,7 @@ export const formToNotification = (
   enabled: boolean,
   tipoAlerta: TipoAlerta,
   toggles: Record<string, boolean>
-): Notification[] => {
+): Notification => {
   if (!enabled) {
     return [];
   }
@@ -114,19 +114,20 @@ export const formToNotification = (
   // Crear Config para cada pastilla activa
   for (const [toggleKey, isActive] of Object.entries(toggles)) {
     if (isActive && toggleMapping[toggleKey]) {
-      const { momento, offsetNotif } = toggleMapping[toggleKey];
-      configs.push({
+      const { momento, offsetNotif: resolvedOffset } = toggleMapping[toggleKey];
+      const config: Config = {
         id: null,
         activo: true,
         tipoAlerta,
         momento,
-        offsetNotif,
+        offsetNotif: momento === 'antes' ? resolvedOffset : 0,
         osID: null,
-      });
+      };
+      configs.push(config);
     }
   }
 
-  return [configs];
+  return configs;
 };
 
 export const formToTask = (form: RawTaskForm): Tasks => {

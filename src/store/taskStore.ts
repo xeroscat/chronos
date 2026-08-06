@@ -7,6 +7,7 @@ import { PilarType } from '../types';
 import { checkAndCalculateOverflow, getLocalDateString } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
 import { storage } from '../storage/mmkv';
+import { syncTaskNotifications, cancelAllTaskNotifications } from '../features/background/notifications';
 
 const LOCAL_STORAGE_KEY = 'chronos-task-storage';
 
@@ -88,6 +89,10 @@ interface TaskState {
   isLoading: boolean;
   selectedDate: string; // ISO date string (YYYY-MM-DD) for filtering
 
+  // Notification permissions
+  notifGranted: boolean;
+  alarmSupported: boolean;
+
   // Actions
   setSelectedDate: (date: string) => void;
   fetchData: (silent?: boolean) => Promise<void>;
@@ -100,6 +105,9 @@ interface TaskState {
   validateIndexConsistency: () => boolean;
   getIdsForDay: (date: string) => string[];
   getTasksForDay: (date?: string) => Tasks[];
+
+  // Notification permissions action
+  setNotifPermissions: (granted: boolean, alarmSupported: boolean) => void;
 
   // Date filtering
   getFilteredTasks: () => Tasks[];
@@ -115,7 +123,14 @@ export const useTaskStore = create<TaskState>()(
       isLoading: false,
       selectedDate: getLocalDateString(), // Today's date in YYYY-MM-DD format
 
+      // Notification permissions state
+      notifGranted: false,
+      alarmSupported: false,
+
       setSelectedDate: (date) => set({ selectedDate: date }),
+
+      setNotifPermissions: (granted, alarmSupported) =>
+        set({ notifGranted: granted, alarmSupported }),
 
       // --- OBTENER DATOS (MODO OFFLINE) ---
       fetchData: async (silent = false) => {
@@ -153,10 +168,14 @@ export const useTaskStore = create<TaskState>()(
             : undefined,         // ← explicit cleanup
         };
 
+        // --- SYNC NOTIFICATIONS (before set) ---
+        const { alarmSupported } = get();
+        const taskWithNotifs = await syncTaskNotifications(taskWithOverflow, alarmSupported);
+
         // --- ACTUALIZACIÓN OPTIMISTA ---
-        const optimisticId = editingEventId || taskWithOverflow.id;
+        const optimisticId = editingEventId || taskWithNotifs.id;
         const optimisticTask: Tasks = {
-          ...taskWithOverflow,
+          ...taskWithNotifs,
           id: optimisticId,
           blockId: optimisticId,
         };
@@ -254,20 +273,25 @@ export const useTaskStore = create<TaskState>()(
 
       // --- ELIMINAR (DELETE en cascada por FK) ---
       deleteEvent: async (id, type) => {
-        const { tasks, reminders, dayIndex } = get();
-
         if (type === 'task') {
+          // Cancel all notifications for this task BEFORE the atomic set()
+          const { tasks } = get();
+          const target = tasks.find(t => t.id === id);
+          if (target) {
+            await cancelAllTaskNotifications(target);
+          }
+
           set((state) => {
-            const target = state.tasks.find(t => t.id === id);
-            if (!target) {
+            const found = state.tasks.find(t => t.id === id);
+            if (!found) {
               if (__DEV__) {
                 console.warn(`[deleteEvent] target not found for id: ${id}`);
               }
               return state;
             }
-            let newIndex = removeFromIndex(state.dayIndex, target.date, id);
-            if (target.overflowDate) {
-              newIndex = removeFromIndex(newIndex, target.overflowDate, id);
+            let newIndex = removeFromIndex(state.dayIndex, found.date, id);
+            if (found.overflowDate) {
+              newIndex = removeFromIndex(newIndex, found.overflowDate, id);
             }
             return {
               tasks: state.tasks.filter(t => t.id !== id),

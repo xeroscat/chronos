@@ -140,7 +140,7 @@ export type Tasks = {
   priority: string; // Motor de seguimiento
   isCompleted: boolean; // Motor de seguimiento
 
-  recordatorio: Notification[];
+  recordatorio: Notification;
 
   //Supabase
   startTime: string| null; // ISO 8601 with timezone offset.
@@ -166,7 +166,7 @@ export type Reminder = {
   slot: number;
   descripcion: string;
   pilarTipo: PilarType;
-  recordatorio?: Notification[];
+  recordatorio?: Notification;
   //SP
   date: string; // ISO date string (YYYY-MM-DD) for filtering
   version: string|null;
