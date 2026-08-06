@@ -61,7 +61,19 @@ export default function App() {
     selectedDate,
     tasks,
     reminders,
+    goToPrevDay,
+    goToNextDay,
   } = useTaskStore();
+
+  function formatDisplayDate(dateStr: string): string {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('es-MX', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  }
 
   // Real-time clock state
   const [currentSlot, setCurrentSlot] = useState(0);
@@ -138,12 +150,14 @@ export default function App() {
           <TouchableOpacity 
             className="w-[36px] h-[36px] bg-slate-100 rounded-full items-center justify-center border border-slate-200"
             activeOpacity={0.7}
+            onPress={goToPrevDay}
           >
             <Text className="text-slate-700 font-bold text-lg">◀</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             className="w-[36px] h-[36px] bg-slate-100 rounded-full items-center justify-center border border-slate-200"
             activeOpacity={0.7}
+            onPress={goToNextDay}
           >
             <Text className="text-slate-700 font-bold text-lg">▶</Text>
           </TouchableOpacity>
@@ -151,7 +165,7 @@ export default function App() {
 
         <View className="flex-row items-center" style={{ gap: 12 }}>
           <Text className="text-[15px] font-normal text-black/60">
-            {getFormattedDate()}
+            {formatDisplayDate(selectedDate)}
           </Text>
           <TouchableOpacity 
             onPress={async () => {

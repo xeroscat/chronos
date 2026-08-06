@@ -4,7 +4,7 @@ import { Tasks, Reminder } from '../types';
 import { supabase } from '../core/supabase';
 import { localSyncGate } from '../core/localSyncGate';
 import { PilarType } from '../types';
-import { checkAndCalculateOverflow, getLocalDateString } from '../features/timeline/transformers/timeMath';
+import { checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
 import { storage } from '../storage/mmkv';
 import { syncTaskNotifications, cancelAllTaskNotifications } from '../features/background/notifications';
@@ -95,6 +95,8 @@ interface TaskState {
 
   // Actions
   setSelectedDate: (date: string) => void;
+  goToPrevDay: () => void;
+  goToNextDay: () => void;
   fetchData: (silent?: boolean) => Promise<void>;
   saveTask: (task: Tasks, editingEventId: string | null) => Promise<boolean>;
   saveReminder: (reminder: Reminder, editingEventId: string | null) => Promise<void>;
@@ -128,6 +130,20 @@ export const useTaskStore = create<TaskState>()(
       alarmSupported: false,
 
       setSelectedDate: (date) => set({ selectedDate: date }),
+
+      goToPrevDay: () => {
+        const { selectedDate } = get();
+        const current = localDateStringToMidnight(selectedDate);
+        current.setDate(current.getDate() - 1);
+        set({ selectedDate: getLocalDateString(current) });
+      },
+
+      goToNextDay: () => {
+        const { selectedDate } = get();
+        const current = localDateStringToMidnight(selectedDate);
+        current.setDate(current.getDate() + 1);
+        set({ selectedDate: getLocalDateString(current) });
+      },
 
       setNotifPermissions: (granted, alarmSupported) =>
         set({ notifGranted: granted, alarmSupported }),
