@@ -7,10 +7,13 @@ import Animated, {
   withSpring,
   withTiming,
   useDerivedValue,
+  Easing,
 } from 'react-native-reanimated';
 import { useTimelineStore } from '../../../store/useTimelineStore';
+import { useTaskStore } from '../../../store/taskStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { timeToSlot, durationToSlots, checkCollision, slotToTimeParts } from '../transformers/timeMath';
+import { useDayStatus, SLOT_START, SLOT_END } from '../utils/dayStatus';
 
 // Constantes visuales
 const PILLAR_COLORS = {
@@ -69,6 +72,9 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   });
 
   // --- Consumir estado global de Zustand ---
+  const selectedDate = useTaskStore(s => s.selectedDate);
+  const { needleAtEnd, needleAtStart, needleLive, isPast, isFuture } = useDayStatus(selectedDate);
+
   const {
     blocks,
     reminders,
@@ -111,14 +117,59 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeBlocksForCollision);
   const liveColor = isColliding ? '#FF3B30' : PILLAR_COLORS[selectedPilar];
 
-  // Cálculos de la Aguja Actual (Minutos transcurridos fluyendo continuamente)
+  // Cálculos de la Aguja Actual
   const currentMinuteFloat = nowDate.getHours() * 60 + nowDate.getMinutes() + (nowDate.getSeconds() / 60);
-  const currentAngle = 90 + (currentMinuteFloat * 0.25);
-  const currentRad = (currentAngle * Math.PI) / 180;
+  const liveSlot = currentMinuteFloat / 5;
+  
+  const needleSlot = needleLive
+    ? liveSlot
+    : needleAtEnd
+      ? SLOT_END
+      : SLOT_START;
+
+  const targetNeedleAngle = 90 + needleSlot * 1.25;
+
+  const animatedNeedleAngle = useSharedValue(targetNeedleAngle);
+
+  useEffect(() => {
+    animatedNeedleAngle.value = withTiming(targetNeedleAngle, {
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [targetNeedleAngle]);
+
+  const currentRad = useDerivedValue(() => {
+    'worklet';
+    return (animatedNeedleAngle.value * Math.PI) / 180;
+  });
+
+  const needleLineP1 = useDerivedValue(() => {
+    'worklet';
+    return vec(cx + 68.5 * Math.cos(currentRad.value), cy + 68.5 * Math.sin(currentRad.value));
+  });
+
+  const needleLineP2 = useDerivedValue(() => {
+    'worklet';
+    return vec(cx + 142.5 * Math.cos(currentRad.value), cy + 142.5 * Math.sin(currentRad.value));
+  });
+
+  const needleCircleC = useDerivedValue(() => {
+    'worklet';
+    return vec(cx + 142.5 * Math.cos(currentRad.value), cy + 142.5 * Math.sin(currentRad.value));
+  });
 
   // Path para la sombra del tiempo transcurrido (Desde las 00:00 hasta la hora actual)
-  const passedTimeSweep = currentMinuteFloat * 0.25;
-  const passedTimePath = createArcPath(cx, cy, 103, 90, passedTimeSweep);
+  const animatedPassedTimePath = useDerivedValue(() => {
+    'worklet';
+    const sweep = Math.max(0, animatedNeedleAngle.value - 90);
+    return Skia.PathBuilder.Make()
+      .addArc(
+        { x: cx - 103, y: cy - 103, width: 103 * 2, height: 103 * 2 },
+        90,
+        sweep
+      )
+      .build();
+  });
 
   // --- Efectos de Animación de Vista Previa ---
   useEffect(() => {
@@ -233,10 +284,10 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
 
         {/* Layer 2.5: Sombra de Tiempo Transcurrido con Ruido Fractal */}
         <Group opacity={bgBlocksOpacity}>
-          <Path path={passedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="rgba(0, 0, 0, 0.4)" />
+          <Path path={animatedPassedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="rgba(0, 0, 0, 0.4)" />
           <Group blendMode="softLight">
             <ColorMatrix matrix={GRAYSCALE_MATRIX} />
-            <Path path={passedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="white">
+            <Path path={animatedPassedTimePath} style="stroke" strokeWidth={69} strokeCap="butt" color="white">
               <FractalNoise freqX={0.05} freqY={0.05} octaves={3} />
             </Path>
           </Group>
@@ -299,13 +350,13 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
           {/* Layer 6: Current Time needle */}
           <Group>
             <Line 
-              p1={vec(cx + 68.5 * Math.cos(currentRad), cy + 68.5 * Math.sin(currentRad))}
-              p2={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
+              p1={needleLineP1}
+              p2={needleLineP2}
               color="white"
               strokeWidth={3}
             />
             <Circle 
-              c={vec(cx + 142.5 * Math.cos(currentRad), cy + 142.5 * Math.sin(currentRad))}
+              c={needleCircleC}
               r={6}
               color="white"
             />
