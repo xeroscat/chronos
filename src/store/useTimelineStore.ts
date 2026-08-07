@@ -87,12 +87,12 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
   taskTitle: 'Nueva Tarea',
   selectedPilar: 'productividad',
   isPilarSelectorOpen: false,
-  startTime: '08:30',
+  startTime: '08:30 AM',
   duration: '1h 30m',
   reminderBefore: '5m antes',
   description: '',
   
-  reminderTime: '15:15',
+  reminderTime: '03:15 PM',
   reminderDesc: '',
 
   isEditingDesc: false,

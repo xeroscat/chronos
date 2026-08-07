@@ -266,12 +266,10 @@ export default function App() {
 
                     let timeRange = '';
                     if (!isActive) {
-                      const startHour = Math.floor((effectiveSlotInicio * 5) / 60);
-                      const startMin = (effectiveSlotInicio * 5) % 60;
+                      const startTimeParts = slotToTimeParts(effectiveSlotInicio);
                       const endSlot = effectiveSlotInicio + effectiveDuracionSlots;
-                      const endHour = Math.floor((endSlot * 5) / 60);
-                      const endMin = (endSlot * 5) % 60;
-                      timeRange = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')} - ${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+                      const endTimeParts = slotToTimeParts(endSlot);
+                      timeRange = `${startTimeParts.h}:${startTimeParts.m} ${startTimeParts.ampm} - ${endTimeParts.h}:${endTimeParts.m} ${endTimeParts.ampm}`;
                     }
 
                     const aEnd = effectiveSlotInicio + effectiveDuracionSlots;
