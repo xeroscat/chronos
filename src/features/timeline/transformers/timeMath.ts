@@ -162,3 +162,15 @@ export const checkCollision = (
 
   return false;
 };
+
+export function slotsToMinutes(slots: number): number {
+  return slots * 5;
+}
+
+export function slotsToHours(slots: number): number {
+  return Math.floor(slots * 5 / 60);
+}
+
+export function minutesToSlot(minutes: number): number {
+  return minutes / 5;
+}

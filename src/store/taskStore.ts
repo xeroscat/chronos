@@ -1,11 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { Tasks, Reminder } from '../types';
-import { supabase } from '../core/supabase';
-import { localSyncGate } from '../core/localSyncGate';
-import { PilarType } from '../types';
 import { checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
+import { normalizeNotifications } from '../features/tasks/transformers/taskTransformer';
 import { storage } from '../storage/mmkv';
 import { syncTaskNotifications, cancelAllTaskNotifications } from '../features/background/notifications';
 
@@ -111,8 +109,6 @@ interface TaskState {
   // Notification permissions action
   setNotifPermissions: (granted: boolean, alarmSupported: boolean) => void;
 
-  // Date filtering
-  getFilteredTasks: () => Tasks[];
   getFilteredReminders: () => Reminder[];
 }
 
@@ -150,6 +146,7 @@ export const useTaskStore = create<TaskState>()(
 
       // --- OBTENER DATOS (MODO OFFLINE) ---
       fetchData: async (silent = false) => {
+        // set() is synchronous — async is in the outer function only
         // MODO OFFLINE: No cargar de Supabase, solo usar datos locales persistidos
         if (!silent) set({ isLoading: false });
 
@@ -163,6 +160,7 @@ export const useTaskStore = create<TaskState>()(
 
       // --- GUARDADO LOCAL DE TAREAS ---
       saveTask: async (task: Tasks, editingEventId: string | null) => {
+        // set() is synchronous — async is in the outer function only
         const { tasks, dayIndex } = get();
 
         // --- VERIFICACIÓN DE OVERFLOW ---
@@ -184,9 +182,12 @@ export const useTaskStore = create<TaskState>()(
             : undefined,         // ← explicit cleanup
         };
 
-        // --- SYNC NOTIFICATIONS (before set) ---
         const { alarmSupported } = get();
-        const taskWithNotifs = await syncTaskNotifications(taskWithOverflow, alarmSupported);
+        const taskToSync = {
+          ...taskWithOverflow,
+          recordatorio: normalizeNotifications(taskWithOverflow.recordatorio)
+        };
+        const taskWithNotifs = await syncTaskNotifications(taskToSync, alarmSupported);
 
         // --- ACTUALIZACIÓN OPTIMISTA ---
         const optimisticId = editingEventId || taskWithNotifs.id;
@@ -244,6 +245,7 @@ export const useTaskStore = create<TaskState>()(
 
       // --- GUARDADO LOCAL DE RECORDATORIOS ---
       saveReminder: async (reminder: Reminder, editingEventId: string | null) => {
+        // set() is synchronous — async is in the outer function only
         const { reminders, dayIndex } = get();
 
         // --- ACTUALIZACIÓN OPTIMISTA ---
@@ -289,6 +291,7 @@ export const useTaskStore = create<TaskState>()(
 
       // --- ELIMINAR (DELETE en cascada por FK) ---
       deleteEvent: async (id, type) => {
+        // set() is synchronous — async is in the outer function only
         if (type === 'task') {
           // Cancel all notifications for this task BEFORE the atomic set()
           const { tasks } = get();
@@ -352,9 +355,7 @@ export const useTaskStore = create<TaskState>()(
         const { tasks, reminders } = get();
         const correctIndex = buildDayIndex(tasks, reminders);
         set({ dayIndex: correctIndex });
-        if (__DEV__) {
-          console.log('[dayIndex] rebuilt from source of truth');
-        }
+        if (__DEV__) console.log('[dayIndex] rebuilt from source of truth');
       },
 
       validateIndexConsistency: () => {
@@ -375,12 +376,6 @@ export const useTaskStore = create<TaskState>()(
       getIdsForDay: (date) => {
         const { dayIndex } = get();
         return dayIndex[date] ?? [];
-      },
-
-      // --- FILTRADO POR FECHA (incluye overflow) ---
-      getFilteredTasks: () => {
-        const { tasks, selectedDate } = get();
-        return getFilteredTasksSelector(tasks, selectedDate);
       },
 
       getFilteredReminders: () => {

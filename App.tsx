@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
@@ -27,13 +27,6 @@ type UnifiedEvent = (AdjustedTask & { type: 'task'; sortSlot: number }) | (Remin
 
 const PILLAR_COLORS: Record<PilarType, string> = { cuerpo: '#FF5733', mente: '#33A1FF', productividad: '#FFC300', personal: '#34C759' };
 
-const getFormattedDate = () => {
-  const d = new Date();
-  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
-};
-
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -55,9 +48,7 @@ export default function App() {
   const {
     fetchData,
     isLoading,
-    clearData,
     deleteEvent,
-    getFilteredTasks,
     selectedDate,
     tasks,
     reminders,

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { PilarType, Tasks, Reminder } from '../types';
-import { slotToTimeParts, findFirstFreeSpace } from '../features/timeline/transformers/timeMath';
+import { slotToTimeParts, findFirstFreeSpace, slotsToHours, slotsToMinutes } from '../features/timeline/transformers/timeMath';
 import { useUIStore } from './useUIStore';
 import { useTaskStore } from './taskStore';
 import { getFilteredBlocks as getFilteredBlocksSelector } from '../features/timeline/selectors';
@@ -182,8 +182,8 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
 
     if (event.type === 'task') {
       const timeParts = slotToTimeParts(event.slotInicio);
-      const durH = Math.floor((event.duracionSlots * 5) / 60);
-      const durM = (event.duracionSlots * 5) % 60;
+      const durH = slotsToHours(event.duracionSlots);
+      const durM = slotsToMinutes(event.duracionSlots) % 60;
 
       set({
         taskTitle: event.title || 'Nueva Tarea',

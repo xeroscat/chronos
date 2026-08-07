@@ -17,7 +17,7 @@ import { useUIStore } from '../../../store/useUIStore';
 import { useTaskStore } from '../../../store/taskStore';
 import { checkCollision, timeToSlot, durationToSlots } from '../../timeline/transformers/timeMath';
 import { BulletToggle } from '../../../ui/BulletToggle';
-import { formToTask, formToReminder, RawTaskForm, RawReminderForm } from '../transformers/taskTransformer';
+import { formToTask, formToReminder, RawTaskForm, RawReminderForm, normalizeNotifications } from '../transformers/taskTransformer';
 import { TipoAlerta } from '../../../types';
 
 // Constantes de diseño
@@ -185,13 +185,11 @@ export const TaskForm: React.FC = () => {
     duration,
     setDuration,
     reminderBefore,
-    setReminderBefore,
     description,
     setDescription,
     reminderTime,
     setReminderTime,
     reminderDesc,
-    setReminderDesc,
 
     // Pickers states
     isEditingDesc,
@@ -218,8 +216,10 @@ export const TaskForm: React.FC = () => {
   const {
     saveTask,
     saveReminder,
-    getFilteredTasks,
+    getTasksForDay,
     selectedDate,
+    tasks,
+    reminders,
   } = useTaskStore();
 
   const {
@@ -246,6 +246,57 @@ export const TaskForm: React.FC = () => {
   useEffect(() => {
     notificationOpacity.value = withTiming(isNotificationEnabled ? 1 : 0.4, { duration: 200 });
   }, [isNotificationEnabled]);
+
+  useEffect(() => {
+    if (!editingEventId) return;
+
+    const editingTask = tasks.find((t) => (t.id || t.blockId) === editingEventId) || reminders.find((r) => r.id === editingEventId);
+    if (!editingTask) return;
+
+    const notifs = normalizeNotifications(editingTask.recordatorio);
+    
+    if (notifs.length === 0) {
+      setNotificationToggles({
+        'Al iniciar': true,
+        'Al terminar': false,
+        '5m antes': false,
+        '10m antes': false,
+        '15m antes': false,
+        '30m antes': false,
+      });
+      setNotificationType('push');
+      setIsNotificationEnabled(true);
+      return;
+    }
+
+    const first = notifs[0];
+    if (!first || typeof first.tipoAlerta === 'undefined') return;
+    
+    setNotificationType(first.tipoAlerta);
+    setIsNotificationEnabled(first.activo);
+    
+    const rebuiltToggles: Record<string, boolean> = {
+      'Al iniciar': false,
+      'Al terminar': false,
+      '5m antes': false,
+      '10m antes': false,
+      '15m antes': false,
+      '30m antes': false,
+    };
+
+    for (const config of notifs) {
+      if (config.momento === 'antes' && config.offsetNotif != null) {
+        if (config.offsetNotif === 5) rebuiltToggles['5m antes'] = true;
+        if (config.offsetNotif === 10) rebuiltToggles['10m antes'] = true;
+        if (config.offsetNotif === 15) rebuiltToggles['15m antes'] = true;
+        if (config.offsetNotif === 30) rebuiltToggles['30m antes'] = true;
+      }
+      if (config.momento === 'inicio') rebuiltToggles['Al iniciar'] = true;
+      if (config.momento === 'fin') rebuiltToggles['Al terminar'] = true;
+    }
+    
+    setNotificationToggles(rebuiltToggles);
+  }, [editingEventId]);
 
   const animatedNotificationStyle = useAnimatedStyle(() => {
     return {
@@ -369,7 +420,7 @@ export const TaskForm: React.FC = () => {
 
   const liveSlotInicio = timeToSlot(pickerHour, pickerMinute, pickerAmPm);
   const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
-  const activeTasksForCollision = getFilteredTasks().filter(t => (t.id || t.blockId) !== editingEventId);
+  const activeTasksForCollision = getTasksForDay().filter(t => (t.id || t.blockId) !== editingEventId);
   const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeTasksForCollision);
 
   if (!isVisible) return null;

@@ -1,5 +1,13 @@
 import { Tasks, Reminder, PilarType, Notification, Config, TipoAlerta, MomentoAlerta } from '../../../types';
-import { timeToSlot, durationToSlots, checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../../timeline/transformers/timeMath';
+import { timeToSlot, durationToSlots, checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight, slotToTimeParts } from '../../timeline/transformers/timeMath';
+
+export function normalizeNotifications(raw: any): Notification {
+  if (!Array.isArray(raw)) return [];
+  if (raw.length > 0 && Array.isArray(raw[0])) {
+    return raw[0] as Notification;
+  }
+  return raw as Notification;
+}
 
 /**
  * Convierte un slot (0-287) a timestamp ISO 8601
@@ -7,9 +15,11 @@ import { timeToSlot, durationToSlots, checkAndCalculateOverflow, getLocalDateStr
  * Incluye offset de zona horaria explícito (GMT/UTC)
  */
 const slotToISO = (slot: number, date: string): string => {
-  const totalMinutes = slot * 5;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  const { h, m, ampm } = slotToTimeParts(slot);
+  let hours = parseInt(h, 10);
+  if (ampm === 'PM' && hours !== 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+  const minutes = parseInt(m, 10);
   
   const dateObj = localDateStringToMidnight(date);
   dateObj.setHours(hours, minutes, 0, 0);
@@ -30,24 +40,6 @@ const slotToISO = (slot: number, date: string): string => {
   const sec = dateObj.getSeconds().toString().padStart(2, '0');
   
   return `${year}-${month}-${day}T${hour}:${min}:${sec}${offsetString}`;
-};
-
-const createTaskId = (): string => {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-
-  if (typeof globalThis.crypto?.getRandomValues === 'function') {
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  }
-
-  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
 export type RawTaskForm = {

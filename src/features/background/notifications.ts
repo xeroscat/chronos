@@ -2,7 +2,8 @@
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { Tasks, Config, Notification } from '../../types'
-import { localDateStringToMidnight } from '../timeline/transformers/timeMath'
+import { localDateStringToMidnight, slotsToMinutes } from '../timeline/transformers/timeMath'
+import { normalizeNotifications } from '../tasks/transformers/taskTransformer'
 
 // Configure notification handler (must be called before any notification operations)
 Notifications.setNotificationHandler({
@@ -49,7 +50,7 @@ function calcularTrigger(task: Tasks, config: Config): Date {
   const base = localDateStringToMidnight(task.date)
 
   // Add slotInicio in minutes (each slot = 5 minutes)
-  const startMs = (task.slotInicio ?? 0) * 5 * 60 * 1000
+  const startMs = slotsToMinutes(task.slotInicio ?? 0) * 60 * 1000
   const taskStart = new Date(base.getTime() + startMs)
 
   if (config.momento === 'inicio') {
@@ -65,7 +66,7 @@ function calcularTrigger(task: Tasks, config: Config): Date {
 
   if (config.momento === 'fin') {
     // End time = start + duration
-    const durationMs = (task.duracionSlots ?? 0) * 5 * 60 * 1000
+    const durationMs = slotsToMinutes(task.duracionSlots ?? 0) * 60 * 1000
     return new Date(taskStart.getTime() + durationMs)
   }
 
@@ -104,12 +105,18 @@ async function scheduleAlerta(
       ? 'chronos-alarm'
       : 'chronos-push'
 
+  const isAlarm = config.tipoAlerta === 'alarma' && alarmSupported
+
   const osId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: task.title ?? 'Chronos',
+      title: isAlarm 
+        ? `⏰ ${task.title ?? 'Chronos'}`
+        : task.title ?? 'Chronos',
       body: buildNotifBody(config, task),
       data: { taskId: task.id, configId: config.id },
       sound: true,
+      color: isAlarm ? '#E24B4A' : '#378ADD',
+      sticky: isAlarm,
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -132,7 +139,7 @@ export async function syncTaskNotifications(
   task: Tasks,
   alarmSupported: boolean
 ): Promise<Tasks> {
-  const configs: Notification = task.recordatorio ?? []
+  const configs: Notification = normalizeNotifications(task.recordatorio)
   const updated: Config[] = []
 
   for (const config of configs) {
@@ -155,7 +162,7 @@ export async function syncTaskNotifications(
 export async function cancelAllTaskNotifications(
   task: Tasks
 ): Promise<void> {
-  const configs: Notification = task.recordatorio ?? []
+  const configs: Notification = normalizeNotifications(task.recordatorio)
   for (const config of configs) {
     await cancelAlerta(config.osID)
   }

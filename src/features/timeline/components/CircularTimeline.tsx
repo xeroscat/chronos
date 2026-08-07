@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Dimensions } from 'react-native';
+import { View, Text } from 'react-native';
 import { Canvas, Circle, Path, Skia, vec, Line, Group, FractalNoise, ColorMatrix } from '@shopify/react-native-skia';
 import Animated, {
   useSharedValue,
@@ -12,16 +12,22 @@ import Animated, {
 import { useTimelineStore } from '../../../store/useTimelineStore';
 import { useTaskStore } from '../../../store/taskStore';
 import { useUIStore } from '../../../store/useUIStore';
-import { timeToSlot, durationToSlots, checkCollision, slotToTimeParts } from '../transformers/timeMath';
+import { timeToSlot, durationToSlots, checkCollision, slotToTimeParts, minutesToSlot } from '../transformers/timeMath';
 import { useDayStatus, SLOT_START, SLOT_END } from '../utils/dayStatus';
 
-// Constantes visuales
 const PILLAR_COLORS = {
   cuerpo: '#FF5733',
   mente: '#33A1FF',
   productividad: '#FFC300',
   personal: '#34C759',
 };
+
+const TIMELINE_OVERLAY_STYLE = {
+  width: 350,
+  height: 350,
+  left: -37.5,
+  top: -37.5,
+} as const;
 
 const GRAYSCALE_MATRIX = [
   0.33, 0.33, 0.33, 0, 0,
@@ -73,13 +79,11 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
 
   // --- Consumir estado global de Zustand ---
   const selectedDate = useTaskStore(s => s.selectedDate);
-  const { needleAtEnd, needleAtStart, needleLive, isPast, isFuture } = useDayStatus(selectedDate);
+  const { needleAtEnd, needleLive } = useDayStatus(selectedDate);
 
   const {
-    blocks,
     reminders,
     getFilteredBlocks,
-    getFilteredReminders,
     selectedPilar,
     pickerHour,
     pickerMinute,
@@ -119,7 +123,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
 
   // Cálculos de la Aguja Actual
   const currentMinuteFloat = nowDate.getHours() * 60 + nowDate.getMinutes() + (nowDate.getSeconds() / 60);
-  const liveSlot = currentMinuteFloat / 5;
+  const liveSlot = minutesToSlot(currentMinuteFloat);
   
   const needleSlot = needleLive
     ? liveSlot
@@ -251,7 +255,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
       style={animatedTimelineStyle}
       className="w-[275px] h-[275px] items-center justify-center relative"
     >
-      <Canvas style={{ width: 350, height: 350, position: 'absolute', left: -37.5, top: -37.5 }}>
+      <Canvas style={[{ position: 'absolute' }, TIMELINE_OVERLAY_STYLE]}>
         <Group opacity={timelineOpacity}>
           {/* Layer 1: Base Circle */}
           <Circle c={vec(cx, cy)} r={137.5} color="#D9D9D9" />
@@ -365,7 +369,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
       </Canvas>
 
       {/* Guide Hour Numbers and Text Overlays */}
-      <View className="absolute items-center justify-center" style={{ width: 350, height: 350, left: -37.5, top: -37.5 }}>
+      <View className="absolute items-center justify-center" style={TIMELINE_OVERLAY_STYLE}>
         {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => {
           const rad = ((90 + h * 15) * Math.PI) / 180;
           const rText = 52;
