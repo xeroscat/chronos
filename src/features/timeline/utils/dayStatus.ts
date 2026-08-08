@@ -43,14 +43,17 @@ export function useDayStatus(selectedDate: string): DayStatusResult {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const newToday = getLocalDateString()
-      if (newToday !== today) {
-        setToday(newToday)
-      }
+      setToday((currentToday) => {
+        const newToday = getLocalDateString()
+        if (newToday !== currentToday) {
+          return newToday
+        }
+        return currentToday
+      })
     }, 30_000)
 
     return () => clearInterval(interval)
-  }, [today])
+  }, [])
 
   return computeDayStatus(selectedDate, today)
 }
