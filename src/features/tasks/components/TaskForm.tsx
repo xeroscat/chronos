@@ -17,7 +17,15 @@ import { useUIStore } from '../../../store/useUIStore';
 import { useTaskStore } from '../../../store/taskStore';
 import { checkCollision, timeToSlot, durationToSlots } from '../../timeline/transformers/timeMath';
 import { BulletToggle } from '../../../ui/BulletToggle';
-import { formToTask, formToReminder, RawTaskForm, RawReminderForm, normalizeNotifications } from '../transformers/taskTransformer';
+import {
+  formToTask,
+  formToReminder,
+  formToNotification,
+  RawTaskForm,
+  RawReminderForm,
+  normalizeNotifications,
+  buildNotifPillLabel,
+} from '../transformers/taskTransformer';
 import { TipoAlerta } from '../../../types';
 
 // Constantes de diseño
@@ -243,6 +251,19 @@ export const TaskForm: React.FC = () => {
   const [isNotificationEnabled, setIsNotificationEnabled] = useState(true);
   const notificationOpacity = useSharedValue(isNotificationEnabled ? 1 : 0.4);
 
+  const resetNotificationState = () => {
+    setNotificationToggles({
+      'Al iniciar': true,
+      'Al terminar': false,
+      '5m antes': false,
+      '10m antes': false,
+      '15m antes': false,
+      '30m antes': false,
+    });
+    setNotificationType('push');
+    setIsNotificationEnabled(true);
+  };
+
   useEffect(() => {
     notificationOpacity.value = withTiming(isNotificationEnabled ? 1 : 0.4, { duration: 200 });
   }, [isNotificationEnabled]);
@@ -253,50 +274,26 @@ export const TaskForm: React.FC = () => {
     const editingTask = tasks.find((t) => (t.id || t.blockId) === editingEventId) || reminders.find((r) => r.id === editingEventId);
     if (!editingTask) return;
 
-    const notifs = normalizeNotifications(editingTask.recordatorio);
-    
-    if (notifs.length === 0) {
-      setNotificationToggles({
-        'Al iniciar': true,
-        'Al terminar': false,
-        '5m antes': false,
-        '10m antes': false,
-        '15m antes': false,
-        '30m antes': false,
-      });
-      setNotificationType('push');
-      setIsNotificationEnabled(true);
-      return;
-    }
+    const {
+      isNotificationEnabled: normalizedEnabled,
+      notificationType: normalizedType,
+      notificationToggles: normalizedToggles,
+    } = normalizeNotifications(editingTask.recordatorio ?? []);
 
-    const first = notifs[0];
-    if (!first || typeof first.tipoAlerta === 'undefined') return;
-    
-    setNotificationType(first.tipoAlerta);
-    setIsNotificationEnabled(first.activo);
-    
+    setNotificationType(normalizedType);
+    setIsNotificationEnabled(normalizedEnabled);
+
     const rebuiltToggles: Record<string, boolean> = {
-      'Al iniciar': false,
-      'Al terminar': false,
-      '5m antes': false,
-      '10m antes': false,
-      '15m antes': false,
-      '30m antes': false,
+      'Al iniciar': normalizedToggles.inicio ?? false,
+      'Al terminar': normalizedToggles.fin ?? false,
+      '5m antes': normalizedToggles.antes5 ?? false,
+      '10m antes': normalizedToggles.antes10 ?? false,
+      '15m antes': normalizedToggles.antes15 ?? false,
+      '30m antes': normalizedToggles.antes30 ?? false,
     };
 
-    for (const config of notifs) {
-      if (config.momento === 'antes' && config.offsetNotif != null) {
-        if (config.offsetNotif === 5) rebuiltToggles['5m antes'] = true;
-        if (config.offsetNotif === 10) rebuiltToggles['10m antes'] = true;
-        if (config.offsetNotif === 15) rebuiltToggles['15m antes'] = true;
-        if (config.offsetNotif === 30) rebuiltToggles['30m antes'] = true;
-      }
-      if (config.momento === 'inicio') rebuiltToggles['Al iniciar'] = true;
-      if (config.momento === 'fin') rebuiltToggles['Al terminar'] = true;
-    }
-    
     setNotificationToggles(rebuiltToggles);
-  }, [editingEventId]);
+  }, [editingEventId, tasks, reminders]);
 
   const animatedNotificationStyle = useAnimatedStyle(() => {
     return {
@@ -334,24 +331,16 @@ export const TaskForm: React.FC = () => {
       setIsVisible(true);
       translateY.value = withSpring(0, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0.3, { duration: 330 });
-      
-      // Reset notification state when form opens to avoid ghost options
-      setNotificationToggles({
-        'Al iniciar': true,
-        'Al terminar': false,
-        '5m antes': false,
-        '10m antes': false,
-        '15m antes': false,
-        '30m antes': false,
-      });
-      setNotificationType('push');
-      setIsNotificationEnabled(true);
+
+      if (!editingEventId) {
+        resetNotificationState();
+      }
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { mass: 1, damping: 20, stiffness: 100 });
       backdropOpacity.value = withTiming(0, { duration: 250 });
       setTimeout(() => setIsVisible(false), 300);
     }
-  }, [isFormOpen, SCREEN_HEIGHT]);
+  }, [isFormOpen, SCREEN_HEIGHT, editingEventId]);
 
   const animatedCardStyle = useAnimatedStyle(() => {
     return {
@@ -369,6 +358,13 @@ export const TaskForm: React.FC = () => {
   const handleSaveTaskSubmit = () => {
     if (activeTab === 'tareas') {
       // Transformar raw form a Tasks
+      const existingTask = tasks.find((t) => (t.id || t.blockId) === editingEventId);
+      const notifConfigs = formToNotification(
+        isNotificationEnabled,
+        notificationType,
+        notificationToggles,
+        existingTask?.recordatorio ?? []
+      );
       const rawTaskForm: RawTaskForm = {
         pickerHour,
         pickerMinute,
@@ -381,12 +377,14 @@ export const TaskForm: React.FC = () => {
         editingEventId,
         parentId: null,
         fechaLocal: selectedDate,
+        existingConfigs: existingTask?.recordatorio ?? [],
         // Notification fields
         isNotificationEnabled,
         notificationType,
         notificationToggles,
       };
       const task = formToTask(rawTaskForm);
+      task.recordatorio = notifConfigs;
       const success = saveTask(task, editingEventId);
       if (!success) {
         Alert.alert(
@@ -399,6 +397,13 @@ export const TaskForm: React.FC = () => {
       }
     } else {
       // Transformar raw form a Reminder
+      const existingReminder = reminders.find((r) => r.id === editingEventId);
+      const notifConfigs = formToNotification(
+        isNotificationEnabled,
+        notificationType,
+        notificationToggles,
+        existingReminder?.recordatorio ?? []
+      );
       const rawReminderForm: RawReminderForm = {
         pickerHour,
         pickerMinute,
@@ -407,12 +412,14 @@ export const TaskForm: React.FC = () => {
         reminderDesc,
         editingEventId,
         fechaLocal: selectedDate,
+        existingConfigs: existingReminder?.recordatorio ?? [],
         // Notification fields
         isNotificationEnabled,
         notificationType,
         notificationToggles,
       };
       const reminder = formToReminder(rawReminderForm);
+      reminder.recordatorio = notifConfigs;
       saveReminder(reminder, editingEventId);
       setFormOpen(false);
     }
@@ -422,6 +429,10 @@ export const TaskForm: React.FC = () => {
   const liveDuracionSlots = durationToSlots(pickerDurationHour, pickerDurationMin);
   const activeTasksForCollision = getTasksForDay().filter(t => (t.id || t.blockId) !== editingEventId);
   const isColliding = checkCollision(liveSlotInicio, liveDuracionSlots, activeTasksForCollision);
+  const notificationSummaryLabel = buildNotifPillLabel(
+    isNotificationEnabled,
+    formToNotification(isNotificationEnabled, notificationType, notificationToggles)
+  );
 
   if (!isVisible) return null;
 
@@ -543,7 +554,7 @@ export const TaskForm: React.FC = () => {
                       onPress={() => setEditingAlert(true)}
                       className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center mb-2"
                     >
-                      <Text className="text-[12px] font-medium text-slate-800">{reminderBefore}</Text>
+                      <Text className="text-[12px] font-medium text-slate-800">{notificationSummaryLabel}</Text>
                     </TouchableOpacity>
 
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
@@ -572,7 +583,7 @@ export const TaskForm: React.FC = () => {
                       onPress={() => setEditingAlert(true)}
                       className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center mb-2"
                     >
-                      <Text className="text-[12px] font-medium text-slate-800">{reminderBefore}</Text>
+                      <Text className="text-[12px] font-medium text-slate-800">{notificationSummaryLabel}</Text>
                     </TouchableOpacity>
 
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>

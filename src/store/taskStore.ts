@@ -3,7 +3,6 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { Tasks, Reminder } from '../types';
 import { checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
-import { normalizeNotifications } from '../features/tasks/transformers/taskTransformer';
 import { storage } from '../storage/mmkv';
 import { syncTaskNotifications, cancelAllTaskNotifications } from '../features/background/notifications';
 
@@ -183,16 +182,31 @@ export const useTaskStore = create<TaskState>()(
         };
 
         const { alarmSupported } = get();
+
+        if (editingEventId) {
+          const prevTask = tasks.find(t => (t.id || t.blockId) === editingEventId);
+          if (prevTask) {
+            await cancelAllTaskNotifications(prevTask);
+          }
+        }
+
         const taskToSync = {
           ...taskWithOverflow,
-          recordatorio: normalizeNotifications(taskWithOverflow.recordatorio)
+          recordatorio: taskWithOverflow.recordatorio ?? []
         };
         const taskWithNotifs = await syncTaskNotifications(taskToSync, alarmSupported);
 
-        // --- ACTUALIZACIÓN OPTIMISTA ---
-        const optimisticId = editingEventId || taskWithNotifs.id;
-        const optimisticTask: Tasks = {
+        const notifConfigs = taskWithNotifs.recordatorio ?? [];
+        const finalNotifications = notifConfigs.length > 0 ? notifConfigs : [];
+        const taskToSave = {
           ...taskWithNotifs,
+          recordatorio: finalNotifications,
+        };
+
+        // --- ACTUALIZACIÓN OPTIMISTA ---
+        const optimisticId = editingEventId || taskToSave.id;
+        const optimisticTask: Tasks = {
+          ...taskToSave,
           id: optimisticId,
           blockId: optimisticId,
         };

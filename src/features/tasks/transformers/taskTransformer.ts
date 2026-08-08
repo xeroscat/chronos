@@ -1,12 +1,94 @@
 import { Tasks, Reminder, PilarType, Notification, Config, TipoAlerta, MomentoAlerta } from '../../../types';
 import { timeToSlot, durationToSlots, checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight, slotToTimeParts } from '../../timeline/transformers/timeMath';
 
-export function normalizeNotifications(raw: any): Notification {
-  if (!Array.isArray(raw)) return [];
-  if (raw.length > 0 && Array.isArray(raw[0])) {
-    return raw[0] as Notification;
+export function normalizeNotifications(configs: Config[]): {
+  isNotificationEnabled: boolean
+  notificationType: TipoAlerta
+  notificationToggles: Record<string, boolean>
+} {
+  const defaults = {
+    isNotificationEnabled: false,
+    notificationType: 'push' as TipoAlerta,
+    notificationToggles: {
+      inicio: false,
+      fin: false,
+      antes5: false,
+      antes10: false,
+      antes15: false,
+      antes30: false,
+    },
   }
-  return raw as Notification;
+
+  if (!configs || configs.length === 0) return defaults
+
+  const activeConfigs = configs.filter(c => c.activo)
+  const isEnabled = activeConfigs.length > 0
+  const notificationType = configs[0].tipoAlerta ?? 'push'
+
+  const toggles = { ...defaults.notificationToggles }
+  for (const config of configs) {
+    if (config.momento === 'inicio') {
+      toggles.inicio = config.activo
+    }
+    if (config.momento === 'fin') {
+      toggles.fin = config.activo
+    }
+    if (config.momento === 'antes') {
+      const key = `antes${config.offsetNotif}` as keyof typeof toggles
+      if (key in toggles) {
+        toggles[key] = config.activo
+      }
+    }
+  }
+
+  return {
+    isNotificationEnabled: isEnabled,
+    notificationType,
+    notificationToggles: toggles,
+  }
+}
+
+export function normalizeToggleKeys(
+  toggles: Record<string, boolean>
+): Record<string, boolean> {
+  const normalized = {
+    inicio: false,
+    fin: false,
+    antes5: false,
+    antes10: false,
+    antes15: false,
+    antes30: false,
+  }
+
+  for (const [key, value] of Object.entries(toggles ?? {})) {
+    if (key === 'inicio' || key === 'Al iniciar') normalized.inicio = Boolean(value)
+    if (key === 'fin' || key === 'Al terminar') normalized.fin = Boolean(value)
+    if (key === 'antes5' || key === '5m antes') normalized.antes5 = Boolean(value)
+    if (key === 'antes10' || key === '10m antes') normalized.antes10 = Boolean(value)
+    if (key === 'antes15' || key === '15m antes') normalized.antes15 = Boolean(value)
+    if (key === 'antes30' || key === '30m antes') normalized.antes30 = Boolean(value)
+  }
+
+  return normalized
+}
+
+export function buildNotifPillLabel(
+  enabled: boolean,
+  configs: Config[]
+): string {
+  if (!enabled || configs.length === 0) return 'Sin alertas'
+
+  const parts: string[] = []
+  for (const c of configs) {
+    if (!c.activo) continue
+    if (c.momento === 'inicio') parts.push('Al iniciar')
+    if (c.momento === 'fin') parts.push('Al terminar')
+    if (c.momento === 'antes') parts.push(`${c.offsetNotif}m antes`)
+  }
+
+  if (parts.length === 0) return 'Sin alertas'
+  if (parts.length === 1) return parts[0]
+  return `${parts.length} alertas`
 }
 
 /**
@@ -54,6 +136,7 @@ export type RawTaskForm = {
   editingEventId?: string | null; // optional, present when editing
   parentId?: string | null;
   fechaLocal?: string | null;
+  existingConfigs?: Config[];
   // Notification fields
   isNotificationEnabled: boolean;
   notificationType: TipoAlerta;
@@ -68,6 +151,7 @@ export type RawReminderForm = {
   reminderDesc: string;
   editingEventId?: string | null;
   fechaLocal?: string | null;
+  existingConfigs?: Config[];
   // Notification fields
   isNotificationEnabled: boolean;
   notificationType: TipoAlerta;
@@ -85,41 +169,44 @@ export type RawReminderForm = {
 export const formToNotification = (
   enabled: boolean,
   tipoAlerta: TipoAlerta,
-  toggles: Record<string, boolean>
+  toggles: Record<string, boolean>,
+  existingConfigs?: Config[]
 ): Notification => {
-  if (!enabled) {
-    return [];
-  }
+  if (!enabled) return []
 
-  const configs: Config[] = [];
+  const normalizedToggles = normalizeToggleKeys(toggles)
+  const configs: Config[] = []
 
-  // Mapeo de pastillas a configuración
-  const toggleMapping: Record<string, { momento: MomentoAlerta; offsetNotif: number }> = {
-    'Al iniciar': { momento: 'inicio', offsetNotif: 0 },
-    'Al terminar': { momento: 'fin', offsetNotif: 0 },
-    '5m antes': { momento: 'antes', offsetNotif: 5 },
-    '10m antes': { momento: 'antes', offsetNotif: 10 },
-    '15m antes': { momento: 'antes', offsetNotif: 15 },
-    '30m antes': { momento: 'antes', offsetNotif: 30 },
-  };
-
-  // Crear Config para cada pastilla activa
-  for (const [toggleKey, isActive] of Object.entries(toggles)) {
-    if (isActive && toggleMapping[toggleKey]) {
-      const { momento, offsetNotif: resolvedOffset } = toggleMapping[toggleKey];
-      const config: Config = {
-        id: null,
-        activo: true,
-        tipoAlerta,
-        momento,
-        offsetNotif: momento === 'antes' ? resolvedOffset : 0,
-        osID: null,
-      };
-      configs.push(config);
+  const existingMap = new Map<string, string | null>()
+  if (existingConfigs) {
+    for (const c of existingConfigs) {
+      const key = c.momento === 'antes'
+        ? `antes_${c.offsetNotif}`
+        : c.momento
+      existingMap.set(key, c.osID)
     }
   }
 
-  return configs;
+  const addConfig = (momento: MomentoAlerta, offsetNotif: number) => {
+    const key = momento === 'antes' ? `antes_${offsetNotif}` : momento
+    configs.push({
+      id: null,
+      activo: true,
+      tipoAlerta,
+      momento,
+      offsetNotif: momento === 'antes' ? offsetNotif : 0,
+      osID: existingMap.get(key) ?? null,
+    })
+  }
+
+  if (normalizedToggles.inicio) addConfig('inicio', 0)
+  if (normalizedToggles.fin) addConfig('fin', 0)
+  if (normalizedToggles.antes5) addConfig('antes', 5)
+  if (normalizedToggles.antes10) addConfig('antes', 10)
+  if (normalizedToggles.antes15) addConfig('antes', 15)
+  if (normalizedToggles.antes30) addConfig('antes', 30)
+
+  return configs
 };
 
 export const formToTask = (form: RawTaskForm): Tasks => {
@@ -136,7 +223,8 @@ export const formToTask = (form: RawTaskForm): Tasks => {
   const recordatorio = formToNotification(
     form.isNotificationEnabled,
     form.notificationType,
-    form.notificationToggles
+    form.notificationToggles,
+    form.existingConfigs
   );
 
   return {
@@ -192,7 +280,8 @@ export const formToReminder = (form: RawReminderForm): Reminder => {
   const recordatorio = formToNotification(
     form.isNotificationEnabled,
     form.notificationType,
-    form.notificationToggles
+    form.notificationToggles,
+    form.existingConfigs
   );
 
   return {

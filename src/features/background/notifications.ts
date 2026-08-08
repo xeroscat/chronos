@@ -3,7 +3,6 @@ import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { Tasks, Config, Notification } from '../../types'
 import { localDateStringToMidnight, slotsToMinutes } from '../timeline/transformers/timeMath'
-import { normalizeNotifications } from '../tasks/transformers/taskTransformer'
 
 // Configure notification handler (must be called before any notification operations)
 Notifications.setNotificationHandler({
@@ -25,7 +24,7 @@ export async function bootNotificationService() {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('chronos-push', {
-      name: 'Chronos — recordatorios',
+      name: 'Recordatorios',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       sound: 'default',
@@ -116,13 +115,23 @@ async function scheduleAlerta(
       data: { taskId: task.id, configId: config.id },
       sound: true,
       color: isAlarm ? '#E24B4A' : '#378ADD',
-      sticky: isAlarm,
+      sticky: isAlarm ? false : undefined,
+      autoDismiss: isAlarm ? false : undefined,
+      priority: isAlarm
+        ? Notifications.AndroidNotificationPriority.MAX
+        : Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger,
-      channelId,
-    },
+    trigger: alarmSupported && config.tipoAlerta === 'alarma'
+      ? {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: trigger,
+          channelId: 'chronos-alarm',
+        }
+      : {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: trigger,
+          channelId: 'chronos-push',
+        },
   })
 
   return osId
@@ -139,7 +148,7 @@ export async function syncTaskNotifications(
   task: Tasks,
   alarmSupported: boolean
 ): Promise<Tasks> {
-  const configs: Notification = normalizeNotifications(task.recordatorio)
+  const configs: Notification = task.recordatorio ?? []
   const updated: Config[] = []
 
   for (const config of configs) {
@@ -162,8 +171,8 @@ export async function syncTaskNotifications(
 export async function cancelAllTaskNotifications(
   task: Tasks
 ): Promise<void> {
-  const configs: Notification = normalizeNotifications(task.recordatorio)
+  const configs: Notification = task.recordatorio ?? []
   for (const config of configs) {
     await cancelAlerta(config.osID)
   }
-}
+}
