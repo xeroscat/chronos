@@ -4,7 +4,12 @@ import { Tasks, Reminder } from '../types';
 import { checkAndCalculateOverflow, getLocalDateString, localDateStringToMidnight } from '../features/timeline/transformers/timeMath';
 import { getFilteredTasks as getFilteredTasksSelector, getFilteredReminders as getFilteredRemindersSelector } from '../features/tasks/selectors';
 import { storage } from '../storage/mmkv';
-import { syncTaskNotifications, cancelAllTaskNotifications } from '../features/background/notifications';
+import {
+  syncTaskNotifications,
+  cancelAllTaskNotifications,
+  syncReminderNotifications,
+  cancelAllReminderNotifications,
+} from '../features/background/notifications';
 
 const LOCAL_STORAGE_KEY = 'chronos-task-storage';
 
@@ -260,14 +265,28 @@ export const useTaskStore = create<TaskState>()(
       // --- GUARDADO LOCAL DE RECORDATORIOS ---
       saveReminder: async (reminder: Reminder, editingEventId: string | null) => {
         // set() is synchronous — async is in the outer function only
-        const { reminders, dayIndex } = get();
+        const { reminders, dayIndex, alarmSupported } = get();
+
+        if (editingEventId) {
+          const prevReminder = reminders.find(r => r.id === editingEventId);
+          if (prevReminder) {
+            await cancelAllReminderNotifications(prevReminder);
+          }
+        }
 
         // --- ACTUALIZACIÓN OPTIMISTA ---
         const optimisticId = editingEventId || reminder.id;
         const optimisticReminder: Reminder = {
           ...reminder,
           id: optimisticId,
+          recordatorio: reminder.recordatorio ?? [],
         };
+
+        const reminderToSync = {
+          ...optimisticReminder,
+          recordatorio: optimisticReminder.recordatorio ?? [],
+        };
+        const reminderWithNotifs = await syncReminderNotifications(reminderToSync, alarmSupported);
 
         let newReminders = [...reminders];
         let nextDayIndex = dayIndex;
@@ -275,26 +294,26 @@ export const useTaskStore = create<TaskState>()(
         if (editingEventId) {
           // Find existing reminder to get old date
           const existingReminder = reminders.find(r => r.id === editingEventId);
-          
+
           // Remove from old date
           if (existingReminder && existingReminder.id) {
             nextDayIndex = removeFromIndex(nextDayIndex, existingReminder.date, existingReminder.id);
           }
 
           // Update reminder
-          newReminders = newReminders.map(r => r.id === editingEventId ? optimisticReminder : r);
+          newReminders = newReminders.map(r => r.id === editingEventId ? reminderWithNotifs : r);
 
           // Add to new date
-          if (optimisticReminder.id) {
-            nextDayIndex = addToIndex(nextDayIndex, optimisticReminder.date, optimisticReminder.id);
+          if (reminderWithNotifs.id) {
+            nextDayIndex = addToIndex(nextDayIndex, reminderWithNotifs.date, reminderWithNotifs.id);
           }
         } else {
           // New reminder - just add it
-          newReminders.push(optimisticReminder);
+          newReminders.push(reminderWithNotifs);
 
           // Add to index
-          if (optimisticReminder.id) {
-            nextDayIndex = addToIndex(nextDayIndex, optimisticReminder.date, optimisticReminder.id);
+          if (reminderWithNotifs.id) {
+            nextDayIndex = addToIndex(nextDayIndex, reminderWithNotifs.date, reminderWithNotifs.id);
           }
         }
 
@@ -332,15 +351,21 @@ export const useTaskStore = create<TaskState>()(
             };
           });
         } else {
+          const { reminders } = get();
+          const target = reminders.find(r => r.id === id);
+          if (target) {
+            await cancelAllReminderNotifications(target);
+          }
+
           set((state) => {
-            const target = state.reminders.find(r => r.id === id);
-            if (!target) {
+            const found = state.reminders.find(r => r.id === id);
+            if (!found) {
               if (__DEV__) {
                 console.warn(`[deleteEvent] target not found for id: ${id}`);
               }
               return state;
             }
-            const newIndex = removeFromIndex(state.dayIndex, target.date, id);
+            const newIndex = removeFromIndex(state.dayIndex, found.date, id);
             return {
               reminders: state.reminders.filter(r => r.id !== id),
               dayIndex: newIndex

@@ -192,7 +192,6 @@ export const TaskForm: React.FC = () => {
     setStartTime,
     duration,
     setDuration,
-    reminderBefore,
     description,
     setDescription,
     reminderTime,
@@ -204,10 +203,12 @@ export const TaskForm: React.FC = () => {
     isEditingTime,
     isEditingDuration,
     isEditingAlert,
+    isEditingAlertReminder,
     setEditingDesc,
     setEditingTime,
     setEditingDuration,
     setEditingAlert,
+    setEditingAlertReminder,
 
     pickerHour,
     pickerMinute,
@@ -312,7 +313,7 @@ export const TaskForm: React.FC = () => {
   // --- Controladores del Teclado ---
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      const offset = e.endCoordinates.height - 100;
+      const offset = e.endCoordinates.height - 50;
       keyboardOffsetValue.value = withSpring(-offset, { mass: 1, damping: 20, stiffness: 100 });
     });
     const keyboardHideListener = Keyboard.addListener('keyboardDidHide', () => {
@@ -386,15 +387,6 @@ export const TaskForm: React.FC = () => {
       const task = formToTask(rawTaskForm);
       task.recordatorio = notifConfigs;
       const success = saveTask(task, editingEventId);
-      if (!success) {
-        Alert.alert(
-          'Conflicto de Tiempo',
-          'El bloque seleccionado se superpone con otra tarea existente. Por favor, ajusta la hora de inicio o la duración.',
-          [{ text: 'Entendido' }]
-        );
-      } else {
-        setFormOpen(false);
-      }
     } else {
       // Transformar raw form a Reminder
       const existingReminder = reminders.find((r) => r.id === editingEventId);
@@ -580,7 +572,7 @@ export const TaskForm: React.FC = () => {
 
                     <Text className="text-[13px] text-center font-normal text-black/50 mb-1">Recordar</Text>
                     <TouchableOpacity
-                      onPress={() => setEditingAlert(true)}
+                      onPress={() => setEditingAlertReminder(true)}
                       className="w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center mb-2"
                     >
                       <Text className="text-[12px] font-medium text-slate-800">{notificationSummaryLabel}</Text>
@@ -725,12 +717,85 @@ export const TaskForm: React.FC = () => {
                 </View>
                 <View className="flex-1 flex-row justify-center items-center gap-4">
                   <ScrollWheel items={['0h', '1h', '2h', '3h', '4h', '5h', '6h', '7h', '8h', '9h', '10h', '11h', '12h']} selectedValue={pickerDurationHour} onValueChange={setPickerDurationHour} />
-                  <ScrollWheel items={['00m', '05m', '10m', '15m', '20m', '25m', '30m', '45m', '50m', '55m']} selectedValue={pickerDurationMin} onValueChange={setPickerDurationMin} />
+                  <ScrollWheel items={['00m', '05m', '10m', '15m', '20m', '25m', '30m','35m','40m', '45m', '50m', '55m']} selectedValue={pickerDurationMin} onValueChange={setPickerDurationMin} />
                 </View>
               </Animated.View>
             )}
 
             {/* Alert Picker Overlay - NOTIFICATION MODAL REDESIGN */}
+            {isEditingAlertReminder && (
+              <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col">
+                {/* Header */}
+                <View className="flex-row items-center w-full mb-1.5 px-1">
+                  <TouchableOpacity onPress={() => setEditingAlertReminder(false)} className="p-2 -ml-2 mr-3">
+                    <Text className="text-xl font-light text-slate-800">✕</Text>
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 14, fontWeight: '400', color: 'rgba(0, 0, 0, 0.5)' }}>Notificación</Text>
+                  <View className="flex-1" />
+                  <SlidingSwitch
+                    isActive={isNotificationEnabled}
+                    onToggle={setIsNotificationEnabled}
+                  />
+                </View>
+                
+                {/* Notifications Body with adjustable opacity */}
+                <Animated.View 
+                  style={[animatedNotificationStyle, { pointerEvents: isNotificationEnabled ? 'auto' : 'none' }]}
+                  className="flex-1"
+                >
+                  
+                  {/* Divider after pills */}
+                  <View className="h-[1px] w-[250px] bg-slate-200 self-center mb-4" />
+
+                  {/* Push and Alarm Buttons */}
+                  <View className="w-[280px] self-center flex-row gap-3">
+                    {/* Push Button */}
+                    <TouchableOpacity
+                      onPress={() => setNotificationType('push')}
+                      className="flex-1 h-[44px] rounded-full justify-center items-center flex-row gap-2"
+                      style={{
+                        backgroundColor: notificationType === 'push' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
+                        borderWidth: notificationType === 'push' ? 0 : 1,
+                        borderColor: 'rgb(226, 232, 240)',
+                      }}
+                    >
+                      <Image 
+                        source={notificationType === 'push' ? require('../../../../assets/push_active.png') : require('../../../../assets/push.png')} 
+                        style={{ width: 18, height: 18 }} 
+                        resizeMode="contain" 
+                      />
+                      <Text style={{
+                        fontSize: 14,
+                        fontWeight: '400',
+                        color: notificationType === 'push' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
+                      }}>Push</Text>
+                    </TouchableOpacity>
+
+                    {/* Alarm Button */}
+                    <TouchableOpacity
+                      onPress={() => setNotificationType('alarma')}
+                      className="flex-1 h-[44px] rounded-full justify-center items-center flex-row gap-2"
+                      style={{
+                        backgroundColor: notificationType === 'alarma' ? 'rgba(0, 0, 0, 0.6)' : 'rgb(255, 255, 255)',
+                        borderWidth: notificationType === 'alarma' ? 0 : 1,
+                        borderColor: 'rgb(226, 232, 240)',
+                      }}
+                    >
+                      <Image 
+                        source={notificationType === 'alarma' ? require('../../../../assets/alarm_active.png') : require('../../../../assets/alarm.png')} 
+                        style={{ width: 18, height: 18 }} 
+                        resizeMode="contain" 
+                      />
+                      <Text style={{
+                        fontSize: 14,
+                        fontWeight: '400',
+                        color: notificationType === 'alarma' ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.5)'
+                      }}>Alarma</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              </Animated.View>
+            )}
             {isEditingAlert && (
               <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} className="absolute inset-0 bg-white rounded-[24px] p-5 z-50 flex-col">
                 {/* Header */}

@@ -42,6 +42,7 @@ interface TimelineState {
   isEditingTime: boolean;
   isEditingDuration: boolean;
   isEditingAlert: boolean;
+  isEditingAlertReminder: boolean;
   
   // Pickers
   pickerHour: string;
@@ -61,6 +62,7 @@ interface TimelineState {
   setEditingTime: (open: boolean) => void;
   setEditingDuration: (open: boolean) => void;
   setEditingAlert: (open: boolean) => void;
+  setEditingAlertReminder: (open: boolean) => void;
   
   setPickerAmPm: (ampm: 'AM' | 'PM') => void;
   setPickerHour: (hour: string) => void;
@@ -99,7 +101,7 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
   isEditingTime: false,
   isEditingDuration: false,
   isEditingAlert: false,
-
+  isEditingAlertReminder: false,
   pickerHour: '08',
   pickerMinute: '30',
   pickerAmPm: 'AM',
@@ -119,7 +121,7 @@ export const useTimelineStore = create<TimelineState>()((set, get) => ({
   setEditingTime: (open) => set({ isEditingTime: open }),
   setEditingDuration: (open) => set({ isEditingDuration: open }),
   setEditingAlert: (open) => set({ isEditingAlert: open }),
-  
+  setEditingAlertReminder: (open) => set({ isEditingAlertReminder: open }),
   setPickerAmPm: (ampm) => set({ pickerAmPm: ampm }),
   setPickerHour: (hour) => set({ pickerHour: hour }),
   setPickerMinute: (min) => set({ pickerMinute: min }),
