@@ -14,6 +14,7 @@ import { useTaskStore } from '../../../store/taskStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { timeToSlot, durationToSlots, checkCollision, slotToTimeParts, minutesToSlot } from '../transformers/timeMath';
 import { useDayStatus, SLOT_START, SLOT_END } from '../utils/dayStatus';
+import { Reminder } from '../../../types';
 
 const PILLAR_COLORS = {
   cuerpo: '#FF5733',
@@ -82,8 +83,8 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
   const { needleAtEnd, needleLive } = useDayStatus(selectedDate);
 
   const {
-    reminders,
     getFilteredBlocks,
+    getFilteredReminders,
     selectedPilar,
     pickerHour,
     pickerMinute,
@@ -332,7 +333,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
         })}
 
         {/* Layer 5: Saved Reminders Lines & Pins */}
-        {reminders.map((reminder) => {
+        {getFilteredReminders().map((reminder: Reminder) => {
           const rad = ((90 + reminder.slot * 1.25) * Math.PI) / 180;
           return (
             <React.Fragment key={reminder.id}>
@@ -389,7 +390,7 @@ export const CircularTimeline: React.FC<CircularTimelineProps> = ({ nowDate, cur
         })}
 
         {/* Saved Reminders Labels */}
-        {reminders.map((reminder) => {
+        {getFilteredReminders().map((reminder: Reminder) => {
           const rad = ((90 + reminder.slot * 1.25) * Math.PI) / 180;
           const xText = cx + 162 * Math.cos(rad);
           const yText = cy + 162 * Math.sin(rad);
