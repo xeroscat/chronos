@@ -197,6 +197,7 @@ export const TaskForm: React.FC = () => {
     reminderTime,
     setReminderTime,
     reminderDesc,
+    setReminderDesc,
 
     // Pickers states
     isEditingDesc,
@@ -268,6 +269,13 @@ export const TaskForm: React.FC = () => {
   useEffect(() => {
     notificationOpacity.value = withTiming(isNotificationEnabled ? 1 : 0.4, { duration: 200 });
   }, [isNotificationEnabled]);
+
+  // Initialize reminderDesc when switching to reminders tab for new reminder
+  useEffect(() => {
+    if (activeTab === 'recordatorios' && !editingEventId && reminderDesc === '') {
+      setReminderDesc('Nuevo Recordatorio');
+    }
+  }, [activeTab, editingEventId]);
 
   useEffect(() => {
     if (!editingEventId) return;
@@ -498,8 +506,8 @@ export const TaskForm: React.FC = () => {
             {/* Header */}
             <View className="flex-row items-center justify-between h-[36px] w-full">
               <TextInput
-                value={taskTitle}
-                onChangeText={setTaskTitle}
+                value={activeTab === 'recordatorios' ? reminderDesc : taskTitle}
+                onChangeText={activeTab === 'recordatorios' ? setReminderDesc : setTaskTitle}
                 className="text-lg font-normal text-slate-900 bg-transparent p-0 m-0 flex-1"
               />
 

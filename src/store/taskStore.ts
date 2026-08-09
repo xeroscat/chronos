@@ -119,8 +119,8 @@ interface TaskState {
 export const useTaskStore = create<TaskState>()(
   persist(
     (set, get) => ({
-      tasks: [],
-      reminders: [],
+      tasks: [] as Tasks[],
+      reminders: [] as Reminder[],
       dayIndex: {},
       isLoading: false,
       selectedDate: getLocalDateString(), // Today's date in YYYY-MM-DD format

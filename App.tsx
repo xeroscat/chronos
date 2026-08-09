@@ -328,7 +328,7 @@ export default function App() {
                       >
                         <Text className="text-sm font-bold text-white">{reminder.descripcion || 'Recordatorio'}</Text>
                         <View className="flex-row items-center">
-                          <Text className="text-xs font-semibold text-white">{timeLabel.split(' ')[0]}</Text>
+                          <Text className="text-xs font-semibold text-white">{timeLabel}</Text>
                           {isEditMode && (
                             <TouchableOpacity
                               onPress={(e) => {
