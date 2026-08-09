@@ -356,7 +356,7 @@ export const TaskForm: React.FC = () => {
   });
 
   // --- Lógica de Negocio al Guardar ---
-  const handleSaveTaskSubmit = () => {
+  const handleSaveTaskSubmit = async () => {
     if (activeTab === 'tareas') {
       // Transformar raw form a Tasks
       const existingTask = tasks.find((t) => (t.id || t.blockId) === editingEventId);
@@ -386,7 +386,8 @@ export const TaskForm: React.FC = () => {
       };
       const task = formToTask(rawTaskForm);
       task.recordatorio = notifConfigs;
-      const success = saveTask(task, editingEventId);
+      await saveTask(task, editingEventId)
+      setFormOpen(false)
     } else {
       // Transformar raw form a Reminder
       const existingReminder = reminders.find((r) => r.id === editingEventId);
