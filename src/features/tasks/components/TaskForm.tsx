@@ -461,13 +461,31 @@ export const TaskForm: React.FC = () => {
           {/* Tab Bar */}
           <Animated.View layout={LinearTransition.springify().mass(0.8).damping(15).stiffness(120)} className="flex-row w-full h-[48px] items-end px-3">
             <TouchableOpacity
-              onPress={() => setActiveTab('tareas')}
+              onPress={() => {
+                const anySubFormOpen =
+                  isEditingAlertReminder ||
+                  isEditingDesc ||
+                  isEditingTime ||
+                  isEditingDuration ||
+                  isEditingAlert
+                if (anySubFormOpen) return
+                setActiveTab('tareas')
+              }}
               className={activeTab === 'tareas' ? 'flex-1 h-[40px] bg-white rounded-t-[16px] items-center justify-center' : 'flex-1 h-[40px] bg-transparent items-center justify-center'}
             >
               <Text className={activeTab === 'tareas' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-black/50'}>Tarea</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => setActiveTab('recordatorios')}
+              onPress={() => {
+                const anySubFormOpen =
+                  isEditingAlertReminder ||
+                  isEditingDesc ||
+                  isEditingTime ||
+                  isEditingDuration ||
+                  isEditingAlert
+                if (anySubFormOpen) return
+                setActiveTab('recordatorios')
+              }}
               className={activeTab === 'recordatorios' ? 'flex-1 h-[40px] bg-white rounded-t-[16px] items-center justify-center' : 'flex-1 h-[40px] bg-transparent items-center justify-center'}
             >
               <Text className={activeTab === 'recordatorios' ? 'text-[16px] font-normal text-slate-900' : 'text-[16px] font-normal text-black/50'}>Recordatorio</Text>
