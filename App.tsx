@@ -316,7 +316,7 @@ export default function App() {
                     );
                   } else {
                     const reminder = event;
-                    const isPast = currentSlot > reminder.slot;
+                    const isPast = currentSlot >= reminder.slot;
                     const timeParts = slotToTimeParts(reminder.slot);
                     const timeLabel = `${timeParts.h}:${timeParts.m} ${timeParts.ampm}`;
                     return (
