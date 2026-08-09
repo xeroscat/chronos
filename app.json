@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "chronos-ai",
-    "slug": "chronos-ai",
+    "name": "chronos",
+    "slug": "chronos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,17 +16,22 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.chronosai",
+      "package": "com.anonymous.chronos",
       "permissions": [
         "USE_EXACT_ALARM",
-        "SCHEDULE_EXACT_ALARM",
-        "RECEIVE_BOOT_COMPLETED"
+        "SCHEDULE_EXACT_ALARM", 
+        "RECEIVE_BOOT_COMPLETED",
+        "USE_FULL_SCREEN_INTENT",
+        "VIBRATE",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "react-native-notify-kit",
       "expo-secure-store",
       [
         "expo-build-properties",

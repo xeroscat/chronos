@@ -144,7 +144,7 @@ async function scheduleAlerta(
         : task.title ?? 'Chronos',
       body: buildNotifBody(config, task),
       data: { taskId: task.id, configId: config.id },
-      sound: true,
+      sound: isAlarm ? 'default' : true,
       color: isAlarm ? '#E24B4A' : '#378ADD',
       sticky: isAlarm ? false : undefined,
       autoDismiss: isAlarm ? false : undefined,
