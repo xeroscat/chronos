@@ -552,6 +552,7 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <TouchableOpacity
                       onPress={handleSaveTaskSubmit}
+                      disabled={isColliding}
                       className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center ${isColliding ? 'opacity-40' : ''}`}
                     >
                       <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
@@ -581,6 +582,7 @@ export const TaskForm: React.FC = () => {
                     <Text className="text-[13px] text-center font-normal text-slate-400 mb-1"> </Text>
                     <TouchableOpacity
                       onPress={handleSaveTaskSubmit}
+                      disabled={isColliding}
                       className={`w-full h-[36px] bg-white border border-slate-100 rounded-full flex-row items-center justify-center ${isColliding ? 'opacity-40' : ''}`}
                     >
                       <Text className="text-[12px] font-normal text-slate-800">Guardar</Text>
