@@ -1,3 +1,12 @@
+// ────────────────────────────────────────────────────────────────────────────────
+// NOTIFICATION SERVICE ARCHITECTURE
+// ────────────────────────────────────────────────────────────────────────────────
+//
+// This file manages notifications using expo-notifications
+//    - Channel: 'chronos-push'
+//    - Used for all notification types
+//
+// ────────────────────────────────────────────────────────────────────────────────
 //Inicio del notification service
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
@@ -20,27 +29,15 @@ export async function bootNotificationService() {
   const { status } = await Notifications.requestPermissionsAsync()
   if (status !== 'granted') return { granted: false, alarmSupported: false }
 
-  let alarmSupported = true
-
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('chronos-push', {
       name: 'Recordatorios',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      sound: 'default',
     })
-    await Notifications.setNotificationChannelAsync('chronos-alarm', {
-      name: 'Chronos — alarmas',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 200, 500],
-      sound: 'default',
-      bypassDnd: true,   // requiere SCHEDULE_EXACT_ALARM en app.json
-    })
-    // canScheduleExactNotifications is not available in v56
-    // Exact alarm support is determined by SCHEDULE_EXACT_ALARM permission in app.json
   }
 
-  return { granted: true, alarmSupported }
+  return { granted: true, alarmSupported: false }
 }
 
 // ─── STEP 3: calcularTrigger ─────────────────────────────────────────────────
@@ -125,44 +122,21 @@ async function scheduleAlerta(
   alarmSupported: boolean
 ): Promise<string> {
   const trigger = calcularTrigger(task, config)
-
-  // Do not schedule if trigger is in the past
   if (trigger <= new Date()) return 'PAST'
-
-  // Degrade to push if alarm not supported on this device
-  const channelId =
-    config.tipoAlerta === 'alarma' && alarmSupported
-      ? 'chronos-alarm'
-      : 'chronos-push'
-
-  const isAlarm = config.tipoAlerta === 'alarma' && alarmSupported
 
   const osId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: isAlarm 
-        ? `⏰ ${task.title ?? 'Chronos'}`
-        : task.title ?? 'Chronos',
+      title: task.title ?? 'Chronos',
       body: buildNotifBody(config, task),
       data: { taskId: task.id, configId: config.id },
-      sound: isAlarm ? 'default' : true,
-      color: isAlarm ? '#E24B4A' : '#378ADD',
-      sticky: isAlarm ? false : undefined,
-      autoDismiss: isAlarm ? false : undefined,
-      priority: isAlarm
-        ? Notifications.AndroidNotificationPriority.MAX
-        : Notifications.AndroidNotificationPriority.HIGH,
+      sound: true,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger: alarmSupported && config.tipoAlerta === 'alarma'
-      ? {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: trigger,
-          channelId: 'chronos-alarm',
-        }
-      : {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: trigger,
-          channelId: 'chronos-push',
-        },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: trigger,
+      channelId: 'chronos-push',
+    },
   })
 
   return osId
@@ -174,48 +148,29 @@ async function scheduleReminderAlerta(
   alarmSupported: boolean
 ): Promise<string> {
   const trigger = calcularTriggerReminder(reminder, config)
-
   if (trigger <= new Date()) return 'PAST'
-
-  const channelId =
-    config.tipoAlerta === 'alarma' && alarmSupported
-      ? 'chronos-alarm'
-      : 'chronos-push'
-
-  const isAlarm = config.tipoAlerta === 'alarma' && alarmSupported
 
   const osId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: isAlarm ? '⏰ Recordatorio' : 'Recordatorio',
+      title: 'Recordatorio',
       body: buildReminderNotifBody(config, reminder),
       data: { reminderId: reminder.id, configId: config.id },
       sound: true,
-      color: isAlarm ? '#E24B4A' : '#378ADD',
-      sticky: isAlarm ? false : undefined,
-      autoDismiss: isAlarm ? false : undefined,
-      priority: isAlarm
-        ? Notifications.AndroidNotificationPriority.MAX
-        : Notifications.AndroidNotificationPriority.HIGH,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger: alarmSupported && config.tipoAlerta === 'alarma'
-      ? {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: trigger,
-          channelId: 'chronos-alarm',
-        }
-      : {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: trigger,
-          channelId: 'chronos-push',
-        },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: trigger,
+      channelId: 'chronos-push',
+    },
   })
 
   return osId
 }
-
 // ─── STEP 6: cancelAlerta ────────────────────────────────────────────────────
 async function cancelAlerta(osID: string | null): Promise<void> {
   if (!osID || osID === 'PAST') return
+  
   await Notifications.cancelScheduledNotificationAsync(osID)
 }
 
