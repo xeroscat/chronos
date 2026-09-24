@@ -29,6 +29,7 @@ export type Config = {
 };
 export type Notification = Config[];
 
+
 // ════════════════════════════════════════════════════════════════════════════
 // 3. RECURSOS ADJUNTOS (Uniones Discriminadas) no usado
 // ════════════════════════════════════════════════════════════════════════════

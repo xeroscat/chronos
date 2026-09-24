@@ -1,0 +1,45 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:1:1-19:12
+INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:1:1-19:12
+	package
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:2:5-47
+		INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:1:11-69
+uses-permission#android.permission.SCHEDULE_EXACT_ALARM
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:5:5-78
+	android:name
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:5:22-76
+uses-permission#android.permission.WAKE_LOCK
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:6:5-68
+	android:name
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:6:22-65
+uses-permission#android.permission.USE_FULL_SCREEN_INTENT
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:7:5-81
+	android:name
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:7:22-78
+application
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:9:5-18:19
+receiver#expo.modules.chronosnativealarms.ChronosAlarmReceiver
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:10:9-17:20
+	android:enabled
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:12:13-35
+	android:exported
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:13:13-37
+	android:name
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:11:13-49
+intent-filter#action:name:com.anonymous.chronos.ALARM_TRIGGER
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:14:13-16:29
+action#com.anonymous.chronos.ALARM_TRIGGER
+ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:15:17-78
+	android:name
+		ADDED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml:15:25-75
+uses-sdk
+INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml
+INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\dev\chronos-ai\modules\chronos-native-alarms\android\src\main\AndroidManifest.xml

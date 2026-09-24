@@ -8,21 +8,25 @@
 //
 // ────────────────────────────────────────────────────────────────────────────────
 //Inicio del notification service
-import * as Notifications from 'expo-notifications'
-import { Platform } from 'react-native'
+import { requireNativeModule } from 'expo';
+import * as Notifications from 'expo-notifications';
+
+const ChronosNativeAlarms = requireNativeModule('ChronosNativeAlarms');
+import { Platform } from 'react-native';
 import { Tasks, Config, Notification, Reminder } from '../../types'
 import { localDateStringToMidnight, slotsToMinutes } from '../timeline/transformers/timeMath'
 
 // Configure notification handler (must be called before any notification operations)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-})
+// TEMPORALMENTE DESACTIVADO PARA AISLAR INTERFERENCIA CON ALARMAS NATIVAS
+// Notifications.setNotificationHandler({
+//   handleNotification: async () => ({
+//     shouldShowAlert: true,
+//     shouldPlaySound: true,
+//     shouldSetBadge: true,
+//     shouldShowBanner: true,
+//     shouldShowList: true,
+//   }),
+// })
 
 //Permisos
 export async function bootNotificationService() {
@@ -37,7 +41,7 @@ export async function bootNotificationService() {
     })
   }
 
-  return { granted: true, alarmSupported: false }
+  return { granted: true, alarmSupported: true }
 }
 
 // ─── STEP 3: calcularTrigger ─────────────────────────────────────────────────
@@ -121,25 +125,64 @@ async function scheduleAlerta(
   config: Config,
   alarmSupported: boolean
 ): Promise<string> {
+  console.log('🔵 [TS] scheduleAlerta called - Task:', task.id, 'Config:', config.id, 'TipoAlerta:', config.tipoAlerta)
+  
   const trigger = calcularTrigger(task, config)
-  if (trigger <= new Date()) return 'PAST'
+  if (trigger <= new Date()) {
+    console.log('⚠️ [TS] Trigger is in the past, returning PAST')
+    return 'PAST'
+  }
 
-  const osId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: task.title ?? 'Chronos',
-      body: buildNotifBody(config, task),
-      data: { taskId: task.id, configId: config.id },
-      sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger,
-      channelId: 'chronos-push',
-    },
-  })
+  const triggerMs = trigger.getTime()
+  const body = buildNotifBody(config, task)
+  const baseId = Math.random().toString(36).substring(7)
+  
+  console.log('⏰ [TS] Trigger calculated:', trigger.toISOString(), 'BaseID:', baseId)
 
-  return osId
+  // Switch de enrutamiento según tipoAlerta
+  if (config.tipoAlerta === 'alarma' && alarmSupported) {
+    // 🔴 FLUJO NATIVO (KOTLIN)
+    console.log('🔴 [TS] Using NATIVE alarm flow')
+    try {
+      await ChronosNativeAlarms.scheduleAlarm({
+        id: baseId,
+        timestamp: triggerMs,
+        title: task.title ?? 'Chronos',
+        body: body,
+        color: '#FFFFFF',
+        isReminder: false,
+        vibrationPattern: [0, 500, 200, 500],
+        allowSnooze: true,
+        snoozeInterval: 5
+      })
+      const result = `alarm:${baseId}`
+      console.log('✅ [TS] Native alarm scheduled successfully:', result)
+      return result
+    } catch (error) {
+      console.error('❌ [TS] Error al programar alarma nativa:', error)
+      return 'PAST'
+    }
+  } else {
+    // 🔵 FLUJO PUSH NORMAL (EXPO)
+    console.log('🔵 [TS] Using EXPO push flow')
+    const osId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: task.title ?? 'Chronos',
+        body: body,
+        data: { taskId: task.id, configId: config.id },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trigger,
+        channelId: 'chronos-push',
+      },
+    })
+    const result = `push:${osId}`
+    console.log('✅ [TS] Expo push scheduled successfully:', result)
+    return result
+  }
 }
 
 async function scheduleReminderAlerta(
@@ -147,31 +190,91 @@ async function scheduleReminderAlerta(
   config: Config,
   alarmSupported: boolean
 ): Promise<string> {
+  console.log('🔵 [TS] scheduleReminderAlerta called - Reminder:', reminder.id, 'Config:', config.id, 'TipoAlerta:', config.tipoAlerta)
+  
   const trigger = calcularTriggerReminder(reminder, config)
-  if (trigger <= new Date()) return 'PAST'
+  if (trigger <= new Date()) {
+    console.log('⚠️ [TS] Reminder trigger is in the past, returning PAST')
+    return 'PAST'
+  }
 
-  const osId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Recordatorio',
-      body: buildReminderNotifBody(config, reminder),
-      data: { reminderId: reminder.id, configId: config.id },
-      sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger,
-      channelId: 'chronos-push',
-    },
-  })
+  const triggerMs = trigger.getTime()
+  const body = buildReminderNotifBody(config, reminder)
+  const baseId = Math.random().toString(36).substring(7)
+  
+  console.log('⏰ [TS] Reminder trigger calculated:', trigger.toISOString(), 'BaseID:', baseId)
 
-  return osId
+  // Switch de enrutamiento según tipoAlerta
+  if (config.tipoAlerta === 'alarma' && alarmSupported) {
+    // 🔴 FLUJO NATIVO (KOTLIN)
+    console.log('🔴 [TS] Using NATIVE alarm flow for reminder')
+    try {
+      await ChronosNativeAlarms.scheduleAlarm({
+        id: baseId,
+        timestamp: triggerMs,
+        title: 'Recordatorio',
+        body: body,
+        color: '#FFFFFF',
+        isReminder: true,
+        vibrationPattern: [0, 500, 200, 500],
+        allowSnooze: true,
+        snoozeInterval: 5
+      })
+      const result = `alarm:${baseId}`
+      console.log('✅ [TS] Native reminder alarm scheduled successfully:', result)
+      return result
+    } catch (error) {
+      console.error('❌ [TS] Error al programar alarma nativa:', error)
+      return 'PAST'
+    }
+  } else {
+    // 🔵 FLUJO PUSH NORMAL (EXPO)
+    console.log('🔵 [TS] Using EXPO push flow for reminder')
+    const osId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Recordatorio',
+        body: body,
+        data: { reminderId: reminder.id, configId: config.id },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trigger,
+        channelId: 'chronos-push',
+      },
+    })
+    const result = `push:${osId}`
+    console.log('✅ [TS] Expo reminder push scheduled successfully:', result)
+    return result
+  }
 }
 // ─── STEP 6: cancelAlerta ────────────────────────────────────────────────────
 async function cancelAlerta(osID: string | null): Promise<void> {
-  if (!osID || osID === 'PAST') return
-  
-  await Notifications.cancelScheduledNotificationAsync(osID)
+  if (!osID || osID === 'PAST') {
+    console.log('⚠️ [TS] cancelAlerta called with invalid ID:', osID)
+    return
+  }
+
+  console.log('🔴 [TS] cancelAlerta called - ID:', osID)
+
+  try {
+    if (osID.startsWith('alarm:')) {
+      // 🔴 CANCELACIÓN NATIVA
+      const realId = osID.replace('alarm:', '')
+      console.log('🔴 [TS] Cancelling NATIVE alarm:', realId)
+      await ChronosNativeAlarms.cancelAlarm(realId)
+      console.log('✅ [TS] Native alarm cancelled successfully:', realId)
+    } else {
+      // 🔵 CANCELACIÓN PUSH EXPO (cubriendo prefijo 'push:' o IDs viejos sin prefijo)
+      const realId = osID.replace('push:', '')
+      console.log('🔵 [TS] Cancelling EXPO push:', realId)
+      await Notifications.cancelScheduledNotificationAsync(realId)
+      console.log('✅ [TS] Expo push cancelled successfully:', realId)
+    }
+  } catch (error) {
+    console.error(`❌ [TS] Error al cancelar la alerta ${osID}:`, error)
+  }
 }
 
 // ─── STEP 7: syncTaskNotifications ───────────────────────────────────────────

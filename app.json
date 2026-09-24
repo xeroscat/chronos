@@ -19,7 +19,17 @@
       "package": "com.anonymous.chronos",
       "permissions": [
         "POST_NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "RECEIVE_BOOT_COMPLETED",
+        "USE_FULL_SCREEN_INTENT"
+      ],
+      "intentFilters": [
+        {
+          "action": "android.intent.action.SET_ALARM",
+          "category": ["android.intent.category.DEFAULT"]
+        }
       ]
     },
     "web": {

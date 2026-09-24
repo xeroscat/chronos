@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="expo.modules.chronosnativealarms">
+
+    <!-- Permiso correcto y aceptado por políticas para apps de tareas/recordatorios -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <application>
+        <receiver
+            android:name=".ChronosAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.anonymous.chronos.ALARM_TRIGGER" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

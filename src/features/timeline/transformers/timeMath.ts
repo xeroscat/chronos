@@ -13,7 +13,7 @@ export function localDateStringToMidnight(dateStr: string): Date {
   return new Date(year, month - 1, day, 0, 0, 0, 0)
 }
 
-// 1. Convierte horas del formulario a Slot (0-287)
+// 1. Hours to slots conversion (0-287)
 export const timeToSlot = (hourStr: string, minStr: string, ampm: 'AM' | 'PM'): number => {
   let h = parseInt(hourStr, 10);
   const m = parseInt(minStr, 10);
@@ -25,7 +25,7 @@ export const timeToSlot = (hourStr: string, minStr: string, ampm: 'AM' | 'PM'): 
   return Math.floor(totalMinutes / 5);
 };
 
-// 2. Convierte duración del formulario a cantidad de Slots
+// 2. Convierte duración del formulario a cantidad de Slots - en español x q me da weba traducir
 export const durationToSlots = (durHourStr: string, durMinStr: string): number => {
   const h = parseInt(durHourStr.replace('h', ''), 10) || 0;
   const m = parseInt(durMinStr.replace('m', ''), 10) || 0;
